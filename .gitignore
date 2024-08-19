@@ -1,0 +1,131 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Virtual environments
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+
+# Pyre type checker
+.pyre/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# PyCharm
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# VSCode
+.vscode/
+*.code-workspace
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+.tags
+.fseventsd
+.Spotlight-V100
+.Trashes
+.VolumeIcon.icns
+.apdisk
+
+# Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Data
+app/data/*.csv
+app/data/*.xlsx
+app/data/*.json
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+*.temp
+*.tmp
+
+# Backup files
+*.bak
+*.swp
+
+# Models
+app/models/*.pth
+app/models/*.pt
+app/models/*.onnx
+app/active_model/*.pth
+app/active_model/*.pt
+app/active_model/*.onnx
+
+# Environment files
+.env
+*.env
+.env.*
+
+# Docker
+docker-compose.yml
+Dockerfile
+
+# Documentation
+docs/_build/
+target/
+
+# Flask / Django stuff:
+instance/
+.webassets-cache
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
