@@ -69,7 +69,7 @@ async def upload_csv(file: UploadFile = File(...), m_name: str = Form(...)):
 
     # Start training the model
     model_save_path = os.path.join(MODEL_DIR, m_name)
-    train_model(file_path, model_save_path)
+    train_model(csv_file=file_path, model_save_path=model_save_path)
 
     # Redirect back to the home page
     return RedirectResponse("/", status_code=303)

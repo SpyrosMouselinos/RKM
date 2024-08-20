@@ -15,7 +15,7 @@
         <h2>Upload CSV to Train a New Model</h2>
         <form id="upload-form" action="/upload-csv/" method="post" enctype="multipart/form-data" onsubmit="return promptModelName()">
             <input type="file" name="file" accept=".csv" required>
-            <input type="hidden" id="model_name" name="model_name">
+            <input type="hidden" id="model_name" name="m_name">
             <button type="submit">Upload and Train</button>
         </form>
     </section>
@@ -117,11 +117,13 @@
     <script>
         function promptModelName() {
             const modelName = prompt("Please enter the name for the new model:");
-            if (modelName) {
-                document.getElementById("model_name").value = modelName;
+            if (modelName && modelName.trim() !== "") {
+                document.getElementById("model_name").value = modelName.trim();
                 return true;
+            } else {
+                alert("Model name cannot be empty. Please enter a valid name.");
+                return false;
             }
-            return false;
         }
     </script>
 

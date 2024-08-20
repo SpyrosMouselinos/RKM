@@ -7,25 +7,46 @@ from torch.utils.data import DataLoader
 from torch.cuda.amp import GradScaler, autocast
 from torch.optim.lr_scheduler import CosineAnnealingLR
 import pandas as pd
-from utils.data_processing import TimeSeriesImputationDataset
+
+from app.modeling.SimpleForcaster import SimpleForcaster
+from .utils.data_processing import TimeSeriesImputationDataset
 
 
-def train_model(file_path, model_save_path):
-    print("Loaded data from: {}".format(file_path))
-    print("Saving model to: {}".format(model_save_path))
-    return
+def train_model(csv_file,
+                model_save_path,
+                sequence_length=10,
+                target_offset=1,
+                batch_size=32,
+                num_epochs=50,
+                learning_rate=0.001,
+                impute_backward=10,
+                group_by='200ms',
+                eval_every=1,
+                early_stopping_patience=5,
+                use_cuda=True):
 
-
-def _train_model(csv_file, model_save_path, model_name, sequence_length=10, target_offset=1,
-                 batch_size=32, num_epochs=50, learning_rate=0.001, impute_backward=10,
-                 group_by='seconds', eval_every=1, early_stopping_patience=5, use_cuda=True):
     # Load the data from the CSV
-    data = pd.read_csv(csv_file).values
-    timestamps = pd.read_csv(csv_file)["timestamp_column"].values
+    data = pd.read_csv(csv_file)
+
+    # Extract the features and timestamps
+    timestamps = data["timestamp_column"].values
+    features = data.drop("timestamp_column", axis=1)
+
+    # Write a function that sorts the names of the columns alphabetically
+    data = data.reindex(sorted(data.columns), axis=1)
+
+    # Save the order of the columns in a list
+    column_order = list(data.columns)
+
+    # Convert it to numpy
+    features = features.values
 
     # Initialize the dataset
-    dataset = TimeSeriesImputationDataset(data, timestamps, sequence_length,
-                                          group_by=group_by, target_offset=target_offset,
+    dataset = TimeSeriesImputationDataset(features,
+                                          timestamps,
+                                          sequence_length,
+                                          group_by=group_by,
+                                          target_offset=target_offset,
                                           impute_backward=impute_backward)
 
     # Split data into training and validation sets
@@ -39,7 +60,7 @@ def _train_model(csv_file, model_save_path, model_name, sequence_length=10, targ
     # Define the model
     input_size = train_dataset[0][0].shape[1]
     output_size = input_size  # Assuming the output has the same dimensions as the input
-    model = SimpleModel(input_size, output_size)
+    model = SimpleForcaster(input_size=input_size, hidden_size=256, output_size=output_size)
 
     # Move model to GPU if available
     device = torch.device("cuda" if use_cuda and torch.cuda.is_available() else "cpu")
