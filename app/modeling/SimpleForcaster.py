@@ -18,7 +18,6 @@ class RecurrentBase(torch.nn.Module):
                                       num_layers=1,
                                       bias=True,
                                       batch_first=True,
-                                      dropout=0.1,
                                       bidirectional=False)
 
         # Output layer - Downscale features to the requested output size #
@@ -43,6 +42,9 @@ class ManyToOneRecurrentBase(RecurrentBase):
     def forward(self, x, init_state=None):
         out, _ = self.recurrent(x, init_state)
         return self.output(out[:, -1, :])
+
+    def to(self, device):
+        super(ManyToOneRecurrentBase, self).to(device)
 
 
 class ManyToManyRecurrentBase(RecurrentBase):
@@ -77,19 +79,27 @@ class ManyToManyRecurrentBase(RecurrentBase):
         out = self.output(out[:, -1:, :])
         outputs.append(out)
 
-        # Autoregressive loop for future steps #
-        # Here we need a dummy input since we dont have any future data #
-        for _ in range(future_steps - 1):
-            # Use the output as the next input #
-            out, h = self.recurrent(self.dummy_token.repeat(batch_size, 1, 1), h)
-            out = self.output(out[:, -1:, :])
-            outputs.append(out)
+        # Teacher-Forced Autoregressive loop for future steps #
+        # Enable this code only for training purposes if teacher forcing is available #
+        # for _ in range(future_steps - 1):
+        #     # Use the output as the next input #
+        #     out, h = self.recurrent(teacher_force_input, h)
+        #     out = self.output(out[:, -1:, :])
+        #     outputs.append(out)
 
-            print(out.size())
+        # Non-Teacher-Forced Autoregressive loop for future steps #
+        out, h = self.recurrent(self.dummy_token.repeat(batch_size, future_steps - 1, 1), h)
+        out = self.output(out)
+        outputs.append(out)
+
         # Concatenate the outputs along the time dimension
         outputs = torch.cat(outputs, dim=1)
 
         return outputs
+
+    def to(self, device):
+        super(ManyToManyRecurrentBase, self).to(device)
+        self.dummy_token = self.dummy_token.to(device)
 
 
 class SimpleForcaster(torch.nn.Module):
@@ -116,17 +126,13 @@ class SimpleForcaster(torch.nn.Module):
                                                  output_size=output_size,
                                                  trainable_dummy_token=trainable_dummy_token)
 
+        self.to(self.device)
+
     def forward(self, *args, **kwargs):
         return self.model(*args, **kwargs)
 
-    def set_device(self, device):
-        if device == self.device:
-            return
-        else:
-            try:
-                pass
-            except Exception as e:
-                print(e)
+    def to(self, device):
+        self.model.to(device)
 
 
 def test_many_to_one():
@@ -163,7 +169,31 @@ def test_simple_forcaster():
     SEQUENCE_LENGTH = 10
     LOOKAHEAD = 2
     model = SimpleForcaster(mode='many_to_many', input_size=INPUT_SIZE, hidden_size=HIDDEN_SIZE,
-                            output_size=OUTPUT_SIZE)
-    dummy_input = torch.randn(BATCH_SIZE, SEQUENCE_LENGTH, INPUT_SIZE)
+                            output_size=OUTPUT_SIZE, device='cuda')
+    dummy_input = torch.randn(BATCH_SIZE, SEQUENCE_LENGTH, INPUT_SIZE, device='cuda')
     output = model(dummy_input, future_steps=LOOKAHEAD)
     assert output.shape == (BATCH_SIZE, LOOKAHEAD, OUTPUT_SIZE)
+
+
+def test_single_batch_timetest():
+    import time
+    INPUT_SIZE = 25
+    HIDDEN_SIZE = 256
+    OUTPUT_SIZE = 10
+    BATCH_SIZE = 1
+    SEQUENCE_LENGTH = 64
+    LOOKAHEAD = 32
+    model = SimpleForcaster(mode='many_to_many', input_size=INPUT_SIZE, hidden_size=HIDDEN_SIZE,
+                            output_size=OUTPUT_SIZE, device='cuda')
+    start = time.time()
+    for i in range(1000):
+        dummy_input = torch.randn(BATCH_SIZE, SEQUENCE_LENGTH, INPUT_SIZE, device='cuda')
+        _ = model(dummy_input, future_steps=LOOKAHEAD)
+    end = time.time()
+    print("\nAverage time per result: ", (end - start) / 25)
+    start_anchor = time.time()
+    time.sleep(1)
+    end_anchor = time.time()
+    print("\n1 Second reference time anchor: ", (end_anchor - start_anchor))
+
+
