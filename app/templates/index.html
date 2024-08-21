@@ -7,125 +7,130 @@
     <link rel="stylesheet" href="../static/style.css">
 </head>
 <body>
-    <header>
-        <h1>Model Management Dashboard</h1>
-    </header>
+<header>
+    <h1>Model Management Dashboard</h1>
+</header>
 
-    <section>
-        <h2>Upload CSV to Train a New Model</h2>
-        <form id="upload-form" action="/upload-csv/" method="post" enctype="multipart/form-data" onsubmit="return promptModelName()">
-            <input type="file" name="file" accept=".csv" required>
-            <input type="hidden" id="model_name" name="m_name">
-            <button type="submit">Upload and Train</button>
-        </form>
-    </section>
+<section>
+    <h2>Upload CSV to Train a New Model</h2>
+    <form id="upload-form" action="/upload-csv/" method="post" enctype="multipart/form-data"
+          onsubmit="return promptModelName()">
+        <input type="file" name="file" accept=".csv" required>
+        <input type="hidden" id="model_name" name="m_name">
+        <button type="submit">Upload and Train</button>
+    </form>
+</section>
 
-    <section>
-        <h2>Available Models</h2>
-        {% if models %}
-        <table>
-            <thead>
-                <tr>
-                    <th>Model</th>
-                    <th>Accuracy</th>
-                    <th>Loss</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for model in models %}
-                {% if model != active_model %}
-                <tr>
-                    <td>{{ model }}</td>
-                    <td>{{ model_metrics[model]['accuracy'] if model in model_metrics else 'N/A' }}</td>
-                    <td>{{ model_metrics[model]['loss'] if model in model_metrics else 'N/A' }}</td>
-                    <td>
-                        <form action="/model/{{ model }}/activate" method="post">
-                            <button type="submit" {% if active_model %}disabled{% endif %}>Activate</button>
-                        </form>
-                    </td>
-                </tr>
-                {% endif %}
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <p>No models available. Please upload a CSV to train a new model.</p>
+<section>
+    <h2>Available Models</h2>
+    {% if models %}
+    <table>
+        <thead>
+        <tr>
+            <th>Model</th>
+            <th>MAPE</th>
+            <th>Loss</th>
+            <th>Actions</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for model in models %}
+        {% if model != active_model %}
+        <tr>
+            <td>{{ model }}</td>
+            <td>{{ model_metrics[model]['mape'] if model in model_metrics else 'N/A' }}</td>
+            <td>{{ model_metrics[model]['loss'] if model in model_metrics else 'N/A' }}</td>
+            <td>
+                <form action="/model/{{ model }}/activate" method="post">
+                    <button type="submit" {% if active_model %}disabled{% endif %}>Activate</button>
+                </form>
+            </td>
+        </tr>
         {% endif %}
-    </section>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No models available. Please upload a CSV to train a new model.</p>
+    {% endif %}
+</section>
 
-    <section>
-        <h2>Active Model</h2>
-        {% if active_model %}
-        <table>
-            <thead>
-                <tr>
-                    <th>Model</th>
-                    <th>Accuracy</th>
-                    <th>Loss</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>{{ active_model }}</td>
-                    <td>{{ model_metrics[active_model]['accuracy'] if active_model in model_metrics else 'N/A' }}</td>
-                    <td>{{ model_metrics[active_model]['loss'] if active_model in model_metrics else 'N/A' }}</td>
-                    <td id="status">Stopped</td>
-                    <td>
-                        <form id="start-stop-form" action="/model/{{ active_model }}/start" method="post">
-                            <button id="start-stop-btn" type="submit">Start</button>
-                        </form>
-                        <form action="/model/{{ active_model }}/deactivate" method="post">
-                            <button type="submit">Stop & Deactivate</button>
-                        </form>
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-        {% else %}
-        <p>No active model.</p>
-        {% endif %}
-    </section>
+<section>
+    <h2>Active Model</h2>
+    {% if active_model %}
+    <table>
+        <thead>
+        <tr>
+            <th>Model</th>
+            <th>MAPE</th>
+            <th>Loss</th>
+            <th>Status</th>
+            <th>Actions</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr>
+            <td>{{ active_model }}</td>
+            <td>{{ active_model_metrics['mape'] if 'mape' in active_model_metrics else 'N/A' }}</td>
+            <td>{{ active_model_metrics['loss'] if 'loss' in active_model_metrics else 'N/A' }}</td>
+            <td id="status">Stopped</td>
+            <td>
+                <form id="start-stop-form" action="/model/{{ active_model }}/start" method="post">
+                    <button id="start-stop-btn" type="submit">Start</button>
+                </form>
+                <form action="/model/{{ active_model }}/deactivate" method="post">
+                    <button type="submit">Stop & Deactivate</button>
+                </form>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+    {% else %}
+    <p>No active model.</p>
+    {% endif %}
+</section>
 
-    <footer>
-        <p>&copy; 2024 Model Management Dashboard</p>
-    </footer>
 
-    <script>
-        document.getElementById('start-stop-form').onsubmit = function(event) {
-            event.preventDefault();
-            var button = document.getElementById('start-stop-btn');
-            var status = document.getElementById('status');
+<footer>
+    <p>&copy; 2024 Model Management Dashboard</p>
+</footer>
 
-            if (button.innerHTML === 'Start') {
-                button.innerHTML = 'Stop';
-                button.form.action = '/model/{{ active_model }}/stop';
-                status.innerHTML = 'Running';
-            } else {
-                button.innerHTML = 'Start';
-                button.form.action = '/model/{{ active_model }}/start';
-                status.innerHTML = 'Stopped';
-            }
+<script>
+    document.getElementById('start-stop-form').onsubmit = async function (event) {
+        event.preventDefault();
+        var button = document.getElementById('start-stop-btn');
+        var status = document.getElementById('status');
 
-            // Submit the form after updating the button and status
-            button.form.submit();
-        };
-    </script>
+        // Send POST request to start the model
+        const response = await fetch(button.form.action, {
+            method: 'POST'
+        });
 
-    <script>
-        function promptModelName() {
-            const modelName = prompt("Please enter the name for the new model:");
-            if (modelName && modelName.trim() !== "") {
-                document.getElementById("model_name").value = modelName.trim();
-                return true;
-            } else {
-                alert("Model name cannot be empty. Please enter a valid name.");
-                return false;
-            }
+        // Check if the response is successful
+        if (response.ok) {
+            button.innerHTML = 'Online';
+            button.disabled = true;
+            button.style.backgroundColor = '#ccc'; // Change the color to gray
+            status.innerHTML = 'Online';
+        } else {
+            alert('Failed to start the model.');
         }
-    </script>
+    };
+</script>
+
+
+<script>
+    function promptModelName() {
+        const modelName = prompt("Please enter the name for the new model:");
+        if (modelName && modelName.trim() !== "") {
+            document.getElementById("model_name").value = modelName.trim();
+            return true;
+        } else {
+            alert("Model name cannot be empty. Please enter a valid name.");
+            return false;
+        }
+    }
+</script>
 
 </body>
 </html>

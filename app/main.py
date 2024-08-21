@@ -8,6 +8,9 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 import os
 import shutil
+
+from app.model_manager import ModelServer
+from app.modeling.SimpleForcaster import SimpleForcaster
 from training import train_model
 
 app = FastAPI()
@@ -38,25 +41,33 @@ async def read_root(request: Request):
             with open(json_path, 'r') as f:
                 metrics = json.load(f)
                 model_metrics[model] = {
-                    "accuracy": metrics.get("accuracy", "N/A"),
+                    "mape": metrics.get("mape", "N/A"),
                     "loss": metrics.get("loss", "N/A")
                 }
         else:
             model_metrics[model] = {
-                "accuracy": "N/A",
+                "mape": "N/A",
                 "loss": "N/A"
             }
 
-    # Identify the active model
+    # Identify the active model and its metrics
     active_model_path = os.path.join(ACTIVE_MODEL_DIR, "best_model.pth")
     active_model = os.path.basename(active_model_path) if os.path.exists(active_model_path) else None
+    active_model_metrics = {}
+
+    if active_model:
+        json_path = os.path.join(ACTIVE_MODEL_DIR, "best_model.json")
+        if os.path.exists(json_path):
+            with open(json_path, 'r') as f:
+                active_model_metrics = json.load(f)
 
     # Render the index.html template with the model data
     return templates.TemplateResponse("index.html", {
         "request": request,
         "models": models,
         "model_metrics": model_metrics,
-        "active_model": active_model
+        "active_model": active_model,
+        "active_model_metrics": active_model_metrics
     })
 
 
@@ -98,17 +109,19 @@ async def activate_model(model_name: str):
 
 
 @app.post("/model/{model_name}/start")
-async def start_model(model_name: str):
-    # Load the model onto the GPU (if available)
+async def start_model():
     model_path = os.path.join(ACTIVE_MODEL_DIR, "best_model.pth")
-    model = torch.load(model_path)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.to(device)
+    model = SimpleForcaster.load_from_checkpoint(model_path, device=torch.device("cpu"))
 
-    # You can add more logic here to start serving the model, if needed.
+    # Signature of a fixed cpu input #
+    fixed_input = torch.randn(1, 10, model.model.input_size, device=torch.device("cpu"))
 
-    # Redirect back to the home page
-    return RedirectResponse("/", status_code=303)
+    # ONNX Conversion Process
+    model_server = ModelServer(model=model, device=torch.device("cpu"))
+    model_server.convert_to_onnx(fixed_input)
+
+    # Return the response to update the frontend
+    return {"status": "online"}
 
 
 @app.post("/model/{model_name}/stop")

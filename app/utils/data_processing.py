@@ -5,8 +5,9 @@ from torch.utils.data import Dataset
 
 
 class TimeSeriesImputationDataset(Dataset):
-    def __init__(self, data, timestamps, sequence_length, group_by='seconds',
+    def __init__(self, data, timestamps, sequence_length, column_names=None, group_by='seconds',
                  target_offset=1, impute_backward=10):
+        self.column_names = column_names
         self.sequence_length = sequence_length
         self.group_by = group_by
         self.target_offset = target_offset
@@ -20,8 +21,8 @@ class TimeSeriesImputationDataset(Dataset):
         self.data = self.normalize_data(self.data)
         self.data, self.invalid_timestamps = self.group_and_impute()
 
-        # Generate valid sequences
-        self.valid_sequences = self.generate_valid_sequences()
+        # Determine the valid sequence start indices
+        self.valid_indices = self.find_valid_sequence_starts()
 
     def calculate_mean_std(self):
         means = np.nanmean(self.data, axis=0)
@@ -41,8 +42,8 @@ class TimeSeriesImputationDataset(Dataset):
         invalid_timestamps = df.index[~valid_rows]  # Timestamps with NaN values
         return df[valid_rows], set(invalid_timestamps)
 
-    def generate_valid_sequences(self):
-        sequences = []
+    def find_valid_sequence_starts(self):
+        valid_indices = []
         for i in range(len(self.data) - self.sequence_length - self.target_offset + 1):
             # Get the start and end timestamps for the current sequence
             start_timestamp = self.timestamps[i]
@@ -52,19 +53,35 @@ class TimeSeriesImputationDataset(Dataset):
             if any(ts in self.invalid_timestamps for ts in pd.date_range(start=start_timestamp, end=end_timestamp)):
                 continue
 
-            x = self.data.iloc[i:i + self.sequence_length].values
-            y = self.data.iloc[i + self.sequence_length + self.target_offset - 1].values
+            valid_indices.append(i)
+        return valid_indices
 
-            if not np.isnan(x).any() and not np.isnan(y).any():
-                sequences.append((x, y))
-        return sequences
+    @property
+    def feature_stats(self):
+        fs = {}
+        if self.column_names is None:
+            return self.mean_std
+        else:
+            assert len(self.column_names) == len(self.mean_std['mean']) == len(self.mean_std['std'])
+            for i, column_name in enumerate(self.column_names):
+                fs[column_name + '_mean'] = self.mean_std['mean'][i]
+                fs[column_name + '_std'] = self.mean_std['std'][i]
+        return fs
 
     def __len__(self):
-        return len(self.valid_sequences)
+        return len(self.valid_indices)
 
     def __getitem__(self, idx):
-        return (torch.tensor(self.valid_sequences[idx][0], dtype=torch.float32),
-                torch.tensor(self.valid_sequences[idx][1], dtype=torch.float32))
+        start_idx = self.valid_indices[idx]
+        end_idx = start_idx + self.sequence_length
+
+        x = self.data.iloc[start_idx:end_idx].values
+        y = self.data.iloc[start_idx + self.sequence_length + self.target_offset - 1].values
+
+        x_tensor = torch.tensor(x, dtype=torch.float32)
+        y_tensor = torch.tensor(y, dtype=torch.float32)
+
+        return x_tensor, y_tensor
 
 
 class RealTimeTimeSeriesDataset:
@@ -97,3 +114,26 @@ class RealTimeTimeSeriesDataset:
                 if np.isnan(data_point[i]):
                     data_point[i] = last_valid[i]
         return data_point
+
+
+def find_and_convert_date_column(df):
+    # List of common date-related keywords
+    date_keywords = ['date', 'year', 'month', 'day', 'time']
+
+    # Dictionary to store the likelihood of each column being a date column
+    date_column_likelihood = {}
+
+    # Iterate through each column
+    for column in df.columns:
+        # Check for date-related keywords in the column name
+        if any(keyword in column.lower() for keyword in date_keywords):
+            date_column_likelihood[column] = 'Keyword match'
+
+    # Find the first column that was identified as a date column
+    for col in date_column_likelihood:
+        if date_column_likelihood[col] in ['Keyword match', 'Convertible to datetime']:
+            df.rename(columns={col: 'date'}, inplace=True)
+            df['date'] = pd.to_datetime(df['date'])  # Ensure it is converted to datetime
+            break  # We rename only the first identified date column
+
+    return df

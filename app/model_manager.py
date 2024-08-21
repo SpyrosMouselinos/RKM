@@ -6,22 +6,35 @@ import onnxruntime
 class ModelServer:
     def __init__(self, model, model_path="simple_forcaster.onnx", device=None):
         self.model = model
+        self.mode = model.mode
         self.model_path = model_path
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.execution_provider = "CPUExecutionProvider" if self.device == torch.device(
+            "cpu") else "CUDAExecutionProvider"
         self.onnx_session = None
 
         # Move model to the appropriate device
         self.model.to(self.device)
 
-    def convert_to_onnx(self, input_tensor, future_steps=2):
+    def convert_to_onnx(self, input_tensor, future_steps=None):
         internal_model = self.model.model
         internal_model.eval()
 
         # Ensure input tensor is on the same device as the model
         input_tensor = input_tensor.to(self.device)
+        if self.mode == 'many_to_one' or future_steps is None:
+            print("You used future_steps=None. Assuming many_to_one model conversion...\n")
+            args = (input_tensor, None)
+        elif self.mode == 'many_to_many' or future_steps > 0:
+            print("You used future_steps=", future_steps, ". Assuming many_to_many model conversion...\n")
+            args = (input_tensor, None, future_steps)
+        else:
+            raise ValueError(
+                'future_steps must be a positive integer for many_to_many model conversion. '
+                'Or future_steps is 0 and the many_to_one model')
 
         torch.onnx.export(internal_model,
-                          (input_tensor, None, future_steps),
+                          args,
                           self.model_path,
                           export_params=True,
                           opset_version=11,
@@ -32,7 +45,8 @@ class ModelServer:
         print(f"Model converted to ONNX and saved to {self.model_path}")
 
         # Load ONNX model into memory with GPU support
-        self.onnx_session = onnxruntime.InferenceSession(self.model_path)#, providers=['CUDAExecutionProvider'])
+        self.onnx_session = onnxruntime.InferenceSession(self.model_path,
+                                                         providers=[self.execution_provider])
 
         # Print inputs for debugging
         for input_meta in self.onnx_session.get_inputs():
@@ -43,26 +57,32 @@ class ModelServer:
     def load_onnx_model(self):
         if self.onnx_session is None:
             # Load ONNX model with GPU support
-            self.onnx_session = onnxruntime.InferenceSession(self.model_path)#, providers=['CUDAExecutionProvider'])
-            print(f"Loaded ONNX model from {self.model_path} on GPU")
+            self.onnx_session = onnxruntime.InferenceSession(self.model_path,
+                                                             providers=[self.execution_provider])
 
-    def infer(self, input_tensor, future_steps=2):
+    def infer(self, input_tensor, future_steps=None):
+
         # Ensure the input tensor is on the appropriate device (GPU if available)
         input_tensor = input_tensor.to(self.device)
 
         # Here its tricky, remember we have 2 inputs for Many to Many model
+        # ONNX requires numpy arrays as inputs
+
+        # Default Many_to_one model input
         onnx_inputs = {
-            self.onnx_session.get_inputs()[0].name: input_tensor.cpu().numpy(),  # ONNX requires numpy arrays
-            self.onnx_session.get_inputs()[1].name: np.array(future_steps, dtype=np.int64)
+            self.onnx_session.get_inputs()[0].name: input_tensor.cpu().numpy(),
         }
+
+        if self.mode == 'many_to_many' and future_steps > 0:
+            # Many_to_many model input
+            onnx_inputs[self.onnx_session.get_inputs()[1].name] = future_steps
 
         # Perform inference using the GPU (if CUDAExecutionProvider is set)
         onnx_outputs = self.onnx_session.run(None, onnx_inputs)
 
-        # Convert output back to the original device (CPU or GPU)
-        output_tensor = torch.tensor(onnx_outputs[0]).to(self.device)
+        # Convert output back to CPU
+        output_tensor = torch.tensor(onnx_outputs[0]).to('cpu')
         return output_tensor
-
 
 
 def test_initialize_and_convert():
@@ -79,11 +99,11 @@ def test_initialize_and_convert():
     OUTPUT_SIZE = 10
     BATCH_SIZE = 1
     SEQUENCE_LENGTH = 256
-    LOOKAHEAD = 128
+    LOOKAHEAD = 2
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Initialize the unoptimized model
-    unoptimized_model = SimpleForcaster(mode='many_to_many',
+    unoptimized_model = SimpleForcaster(mode='many_to_one',
                                         input_size=INPUT_SIZE,
                                         hidden_size=HIDDEN_SIZE,
                                         output_size=OUTPUT_SIZE,
@@ -95,13 +115,15 @@ def test_initialize_and_convert():
     # Time the GPU inference (unoptimized, no ONNX)
     start = time.time()
     for i in range(100):
-        output_gpu = unoptimized_model(fixed_input, future_steps=LOOKAHEAD)
+        output_gpu = unoptimized_model(fixed_input)
     end = time.time()
     print("\nUnoptimized (GPU) Average time per result: ", (end - start) / 100)
 
     # Convert model to ONNX and load it for CPU inference
+    device = torch.device("cpu")
+    unoptimized_model.to(device)
     model_server = ModelServer(unoptimized_model, device=device)
-    model_server.convert_to_onnx(input_tensor=fixed_input, future_steps=LOOKAHEAD)
+    model_server.convert_to_onnx(input_tensor=fixed_input)
 
     # Time the CPU inference (with ONNX)
     start = time.time()
@@ -111,9 +133,8 @@ def test_initialize_and_convert():
     print("\nOptimized (CPU with ONNX) Average time per result: ", (end - start) / 100)
 
     # Compare the outputs from GPU (non-ONNX) and CPU (ONNX)
-    output_cpu_on_device = output_cpu.to(device)  # Move CPU output to GPU for comparison
-    if torch.allclose(output_gpu, output_cpu_on_device, atol=1e-5):
+    output_gpu = output_gpu.to(device)
+    if torch.allclose(output_gpu, output_cpu, atol=1e-5):
         print("\nThe outputs from GPU and CPU are very close!")
     else:
         print("\nThe outputs from GPU and CPU differ.")
-

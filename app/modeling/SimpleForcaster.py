@@ -1,4 +1,7 @@
+from typing import Iterator
+
 import torch
+from torch.nn import Parameter
 
 
 class RecurrentBase(torch.nn.Module):
@@ -108,8 +111,10 @@ class SimpleForcaster(torch.nn.Module):
                  input_size=3,
                  hidden_size=256,
                  output_size=1,
-                 trainable_dummy_token=False, device=None):
+                 trainable_dummy_token=False,
+                 device=None):
         super(SimpleForcaster, self).__init__()
+
         self.device = device
         if self.device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -133,6 +138,34 @@ class SimpleForcaster(torch.nn.Module):
 
     def to(self, device):
         self.model.to(device)
+
+    def parameters(self, recurse: bool = True) -> Iterator[Parameter]:
+        return self.model.parameters()
+
+    @classmethod
+    def load_from_checkpoint(cls, checkpoint_path, device=None):
+        # Load the checkpoint
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+
+        # Extract model arguments from the checkpoint
+        mode = checkpoint['mode']
+        input_size = checkpoint['input_size']
+        hidden_size = checkpoint['hidden_size']
+        output_size = checkpoint['output_size']
+        trainable_dummy_token = checkpoint.get('trainable_dummy_token', False)
+
+        # Create the model instance
+        model = cls(mode=mode,
+                    input_size=input_size,
+                    hidden_size=hidden_size,
+                    output_size=output_size,
+                    trainable_dummy_token=trainable_dummy_token,
+                    device=device)
+
+        # Load the state dictionary
+        model.model.load_state_dict(checkpoint['model_state_dict'])
+
+        return model
 
 
 def test_many_to_one():
@@ -195,5 +228,3 @@ def test_single_batch_timetest():
     time.sleep(1)
     end_anchor = time.time()
     print("\n1 Second reference time anchor: ", (end_anchor - start_anchor))
-
-
