@@ -18,6 +18,7 @@ from utils.data_processing import TimeSeriesImputationDataset, find_and_convert_
 
 def train_model(csv_file,
                 model_save_path,
+                mode='many_to_one',
                 sequence_length=10,
                 target_offset=1,
                 batch_size=32,
@@ -65,10 +66,12 @@ def train_model(csv_file,
     input_size = train_dataset[0][0].shape[-1]
     output_size = train_dataset[0][1].shape[-1]
 
-    model = SimpleForcaster(mode='many_to_one',
+    model = SimpleForcaster(mode=mode,
                             input_size=input_size,
                             hidden_size=128,
-                            output_size=output_size)
+                            output_size=output_size,
+                            target_offset=target_offset,
+                            )
 
     # Move model to GPU if available
     device = torch.device("cuda" if use_cuda and torch.cuda.is_available() else "cpu")
@@ -153,7 +156,7 @@ def train_model(csv_file,
                 best_loss = val_loss
                 best_metrics = val_metrics
                 epochs_no_improve = 0
-                save_model_checkpoint(model, optimizer, scheduler, model_save_path, epoch + 1, best_loss, val_metrics)
+                save_model_checkpoint(model, model_save_path, epoch + 1, best_loss, val_metrics)
             else:
                 epochs_no_improve += 1
                 if epochs_no_improve >= early_stopping_patience:
@@ -183,27 +186,9 @@ def evaluate_model(model, val_loader, criterion, metrics, device):
     return avg_val_loss, avg_val_metrics
 
 
-def save_model_checkpoint(model, optimizer, scheduler, model_save_path, epoch, loss, metrics):
+def save_model_checkpoint(model, model_save_path, epoch, loss, metrics):
     # Define the path for the new checkpoint
     checkpoint_path = model_save_path.replace('.pth', f'_checkpoint_epoch_{epoch}.pth')
-
-    # Save the current model checkpoint
-    checkpoint = {
-        'epoch': epoch,
-        'loss': loss,
-        'optimizer_state_dict': optimizer.state_dict(),
-        'scheduler_state_dict': scheduler.state_dict(),
-        'mode': model.mode,
-        'input_size': model.model.input_size,
-        'hidden_size': model.model.hidden_size,
-        'output_size': model.model.output_size,
-        'model_state_dict': model.model.state_dict(),
-    }
-    if hasattr(model.model, 'trainable_dummy_token'):
-        checkpoint['trainable_dummy_token'] = True
-
-    for k, v in metrics.items():
-        checkpoint[k] = v.item()
 
     # Define the pattern to search for previous checkpoints, excluding the current one
     checkpoint_pattern = model_save_path.replace('.pth', '_checkpoint_epoch_*.pth')
@@ -215,7 +200,7 @@ def save_model_checkpoint(model, optimizer, scheduler, model_save_path, epoch, l
             print(f"Deleted previous checkpoint: {f}")
 
     # Save the checkpoint to disk
-    torch.save(checkpoint, checkpoint_path)
+    model.save_to_checkpoint(epoch=epoch, loss=loss, metrics=metrics, model_save_path=checkpoint_path)
     print(f"Checkpoint saved at {checkpoint_path}")
 
 

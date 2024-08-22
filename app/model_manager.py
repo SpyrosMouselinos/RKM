@@ -1,11 +1,13 @@
 import numpy as np
 import torch
 import onnxruntime
+import gc
 
 
 class ModelServer:
-    def __init__(self, model, model_path="simple_forcaster.onnx", device=None):
+    def __init__(self, model, model_path="./active_model/active_model.onnx", device=None):
         self.model = model
+        self.future_steps = self.model.future_steps
         self.mode = model.mode
         self.model_path = model_path
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -16,22 +18,20 @@ class ModelServer:
         # Move model to the appropriate device
         self.model.to(self.device)
 
-    def convert_to_onnx(self, input_tensor, future_steps=None):
+    def convert_to_onnx(self, input_tensor):
         internal_model = self.model.model
         internal_model.eval()
-
         # Ensure input tensor is on the same device as the model
         input_tensor = input_tensor.to(self.device)
-        if self.mode == 'many_to_one' or future_steps is None:
-            print("You used future_steps=None. Assuming many_to_one model conversion...\n")
+        if self.mode == 'many_to_one':
+            print("Assuming many_to_one model conversion...\n")
             args = (input_tensor, None)
-        elif self.mode == 'many_to_many' or future_steps > 0:
-            print("You used future_steps=", future_steps, ". Assuming many_to_many model conversion...\n")
-            args = (input_tensor, None, future_steps)
+        elif self.mode == 'many_to_many':
+            target_offset = self.model.target_offset
+            print("Assuming many_to_many model conversion...\n")
+            args = (input_tensor, None, target_offset)
         else:
-            raise ValueError(
-                'future_steps must be a positive integer for many_to_many model conversion. '
-                'Or future_steps is 0 and the many_to_one model')
+            raise ValueError('mode must be one of "many_to_one" or "many_to_many"')
 
         torch.onnx.export(internal_model,
                           args,
@@ -43,6 +43,13 @@ class ModelServer:
                           output_names=['output'])
 
         print(f"Model converted to ONNX and saved to {self.model_path}")
+
+        # Unload the Pytorch Model #
+        del self.model
+        if self.device == torch.device("cuda"):
+            torch.cuda.empty_cache()
+        gc.collect()
+        self.model = None
 
         # Load ONNX model into memory with GPU support
         self.onnx_session = onnxruntime.InferenceSession(self.model_path,
@@ -73,8 +80,10 @@ class ModelServer:
             self.onnx_session.get_inputs()[0].name: input_tensor.cpu().numpy(),
         }
 
-        if self.mode == 'many_to_many' and future_steps > 0:
+        if self.mode == 'many_to_many':
             # Many_to_many model input
+            if future_steps is None:
+                future_steps = self.model.future_steps
             onnx_inputs[self.onnx_session.get_inputs()[1].name] = future_steps
 
         # Perform inference using the GPU (if CUDAExecutionProvider is set)

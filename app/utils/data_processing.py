@@ -76,7 +76,7 @@ class TimeSeriesImputationDataset(Dataset):
         end_idx = start_idx + self.sequence_length
 
         x = self.data.iloc[start_idx:end_idx].values
-        y = self.data.iloc[start_idx + self.sequence_length + self.target_offset - 1].values
+        y = self.data.iloc[end_idx: end_idx + self.target_offset].values
 
         x_tensor = torch.tensor(x, dtype=torch.float32)
         y_tensor = torch.tensor(y, dtype=torch.float32)

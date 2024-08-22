@@ -72,15 +72,37 @@ async def read_root(request: Request):
 
 
 @app.post("/upload-csv/")
-async def upload_csv(file: UploadFile = File(...), m_name: str = Form(...)):
+async def upload_csv(file: UploadFile = File(...),
+                     m_name: str = Form(...),
+                     mode: str = Form(...),
+                     sequence_length: int = Form(...),
+                     target_offset: int = Form(...),
+                     batch_size: int = Form(...),
+                     num_epochs: int = Form(...),
+                     learning_rate: float = Form(...),
+                     impute_backward: int = Form(...),
+                     group_by: str = Form(...),
+                     eval_every: int = Form(...),
+                     early_stopping_patience: int = Form(...)):
     # Save the uploaded CSV file
     file_path = os.path.join("./data", file.filename)
     with open(file_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    # Start training the model
+    # Start training the model with the provided parameters
     model_save_path = os.path.join(MODEL_DIR, m_name)
-    train_model(csv_file=file_path, model_save_path=model_save_path)
+    train_model(csv_file=file_path,
+                mode=mode,
+                model_save_path=model_save_path,
+                sequence_length=sequence_length,
+                target_offset=target_offset,
+                batch_size=batch_size,
+                num_epochs=num_epochs,
+                learning_rate=learning_rate,
+                impute_backward=impute_backward,
+                group_by=group_by,
+                eval_every=eval_every,
+                early_stopping_patience=early_stopping_patience)
 
     # Redirect back to the home page
     return RedirectResponse("/", status_code=303)

@@ -13,12 +13,7 @@
 
 <section>
     <h2>Upload CSV to Train a New Model</h2>
-    <form id="upload-form" action="/upload-csv/" method="post" enctype="multipart/form-data"
-          onsubmit="return promptModelName()">
-        <input type="file" name="file" accept=".csv" required>
-        <input type="hidden" id="model_name" name="m_name">
-        <button type="submit">Upload and Train</button>
-    </form>
+    <button onclick="showModal()">Upload and Train</button>
 </section>
 
 <section>
@@ -90,12 +85,81 @@
     {% endif %}
 </section>
 
+<!-- Modal for Model Configuration -->
+<div id="modelConfigModal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal()">&times;</span>
+        <form id="upload-form" action="/upload-csv/" method="post" enctype="multipart/form-data">
+            <label for="file">Choose CSV file:</label>
+            <input type="file" id="file" name="file" accept=".csv" required><br><br>
+
+            <label for="model_name">Model Name:</label>
+            <input type="text" id="model_name" name="m_name" required><br><br>
+
+            <label for="mode">Model Mode of Operation:</label>
+            <select id="mode" name="mode">
+                <option value="many_to_one">many_to_one</option>
+                <option value="many_to_many">many_to_many</option>
+            </select><br><br>
+
+            <label for="sequence_length">Sequence Length (10-256):</label>
+            <input type="range" id="sequence_length" name="sequence_length" min="10" max="256" value="10" oninput="this.nextElementSibling.value = this.value">
+            <input type="number" min="10" max="256" value="10" oninput="this.previousElementSibling.value = this.value"><br><br>
+
+            <label for="target_offset">Target Offset (1 - sequence_length/2):</label>
+            <input type="range" id="target_offset" name="target_offset" min="1" max="128" value="1" oninput="this.nextElementSibling.value = this.value">
+            <input type="number" min="1" max="128" value="1" oninput="this.previousElementSibling.value = this.value"><br><br>
+
+            <label for="batch_size">Batch Size:</label>
+            <select id="batch_size" name="batch_size">
+                <option value="8">8</option>
+                <option value="16">16</option>
+                <option value="32" selected>32</option>
+                <option value="64">64</option>
+                <option value="128">128</option>
+                <option value="256">256</option>
+            </select><br><br>
+
+            <label for="num_epochs">Number of Epochs (1-100):</label>
+            <input type="range" id="num_epochs" name="num_epochs" min="1" max="100" value="10" oninput="this.nextElementSibling.value = this.value">
+            <input type="number" min="1" max="100" value="10" oninput="this.previousElementSibling.value = this.value"><br><br>
+
+            <label for="learning_rate">Learning Rate:</label>
+            <input type="number" id="learning_rate" name="learning_rate" step="0.0001" value="0.001" required><br><br>
+
+            <label for="impute_backward">Impute Backward (0 - sequence_length/4):</label>
+            <input type="range" id="impute_backward" name="impute_backward" min="0" max="64" value="0" oninput="this.nextElementSibling.value = this.value">
+            <input type="number" min="0" max="64" value="0" oninput="this.previousElementSibling.value = this.value"><br><br>
+
+            <label for="group_by">Group By:</label>
+            <input type="text" id="group_by" name="group_by" value="T" required><br><br>
+
+            <label for="eval_every">Evaluate Every (Epochs):</label>
+            <input type="number" id="eval_every" name="eval_every" min="1" value="1" required><br><br>
+
+            <label for="early_stopping_patience">Early Stopping Patience:</label>
+            <input type="number" id="early_stopping_patience" name="early_stopping_patience" min="1" value="5" required><br><br>
+
+            <button type="submit">Start Training</button>
+        </form>
+    </div>
+</div>
 
 <footer>
     <p>&copy; 2024 Model Management Dashboard</p>
 </footer>
 
 <script>
+    // Modal handling functions
+    function showModal() {
+        document.getElementById("modelConfigModal").style.display = "block";
+    }
+
+    function closeModal() {
+        document.getElementById("modelConfigModal").style.display = "none";
+    }
+
+    // Start/Stop form handling
     document.getElementById('start-stop-form').onsubmit = async function (event) {
         event.preventDefault();
         var button = document.getElementById('start-stop-btn');
@@ -116,20 +180,6 @@
             alert('Failed to start the model.');
         }
     };
-</script>
-
-
-<script>
-    function promptModelName() {
-        const modelName = prompt("Please enter the name for the new model:");
-        if (modelName && modelName.trim() !== "") {
-            document.getElementById("model_name").value = modelName.trim();
-            return true;
-        } else {
-            alert("Model name cannot be empty. Please enter a valid name.");
-            return false;
-        }
-    }
 </script>
 
 </body>

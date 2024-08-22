@@ -113,3 +113,59 @@ footer {
     color: white; /* Or #888 */
     text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
 }
+
+
+/* The Modal (background) */
+.modal {
+    display: none; /* Hidden by default */
+    position: fixed; /* Stay in place */
+    z-index: 1000; /* Sit on top */
+    left: 0;
+    top: 0;
+    width: 100%; /* Full width */
+    height: 100%; /* Full height */
+    overflow: auto; /* Enable scroll if needed */
+    background-color: rgb(0,0,0); /* Fallback color */
+    background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+    padding-top: 60px; /* Padding at the top */
+}
+
+/* Modal Content/Box */
+.modal-content {
+    background-color: #fefefe; /* Light background color */
+    color: #000000; /* Black text color */
+    margin: 5% auto; /* 5% from the top and centered */
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%; /* Could be more or less, depending on screen size */
+    max-width: 600px; /* Set a maximum width */
+    z-index: 1001; /* Ensure it is on top of the modal background */
+    box-shadow: 0px 0px 10px rgba(0,0,0,0.5); /* Add a shadow for depth */
+}
+
+/* Close button styling */
+.close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.close:hover,
+.close:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+/* Input fields styling */
+.modal-content input[type="text"],
+.modal-content input[type="number"],
+.modal-content select {
+    color: #000000; /* Ensure text inside input fields is black */
+}
+
+/* Labels and other text */
+.modal-content label {
+    color: #000000; /* Ensure labels and any text in the modal are black */
+}

@@ -1,5 +1,4 @@
 from typing import Iterator
-
 import torch
 from torch.nn import Parameter
 
@@ -107,11 +106,13 @@ class ManyToManyRecurrentBase(RecurrentBase):
 
 class SimpleForcaster(torch.nn.Module):
 
-    def __init__(self, mode='many_to_one',
+    def __init__(self,
+                 mode='many_to_one',
                  input_size=3,
                  hidden_size=256,
                  output_size=1,
                  trainable_dummy_token=False,
+                 target_offset=1,
                  device=None):
         super(SimpleForcaster, self).__init__()
 
@@ -122,10 +123,12 @@ class SimpleForcaster(torch.nn.Module):
             raise ValueError('mode must be one of "many_to_one" or "many_to_many"')
         self.mode = mode
         if mode == 'many_to_one':
+            self.target_offset = target_offset
             self.model = ManyToOneRecurrentBase(input_size=input_size,
                                                 hidden_size=hidden_size,
                                                 output_size=output_size)
         elif mode == 'many_to_many':
+            self.target_offset = target_offset
             self.model = ManyToManyRecurrentBase(input_size=input_size,
                                                  hidden_size=hidden_size,
                                                  output_size=output_size,
@@ -145,13 +148,14 @@ class SimpleForcaster(torch.nn.Module):
     @classmethod
     def load_from_checkpoint(cls, checkpoint_path, device=None):
         # Load the checkpoint
-        checkpoint = torch.load(checkpoint_path, map_location=device)
+        checkpoint = torch.load(checkpoint_path, weights_only=False, map_location=device)
 
         # Extract model arguments from the checkpoint
         mode = checkpoint['mode']
         input_size = checkpoint['input_size']
         hidden_size = checkpoint['hidden_size']
         output_size = checkpoint['output_size']
+        target_offset = checkpoint['target_offset']
         trainable_dummy_token = checkpoint.get('trainable_dummy_token', False)
 
         # Create the model instance
@@ -160,12 +164,41 @@ class SimpleForcaster(torch.nn.Module):
                     hidden_size=hidden_size,
                     output_size=output_size,
                     trainable_dummy_token=trainable_dummy_token,
+                    target_offset=target_offset,
                     device=device)
 
         # Load the state dictionary
         model.model.load_state_dict(checkpoint['model_state_dict'])
 
         return model
+
+    def save_to_checkpoint(self,
+                           epoch=0,
+                           loss=0.0,
+                           metrics=None,
+                           model_save_path=None):
+
+        checkpoint = {
+            'epoch': epoch,
+            'loss': loss,
+            'mode': self.mode,
+            'target_offset': self.target_offset,
+            'input_size': self.model.input_size,
+            'hidden_size': self.model.hidden_size,
+            'output_size': self.model.output_size,
+            'model_state_dict': self.model.state_dict(),
+        }
+        if hasattr(self.model, 'trainable_dummy_token'):
+            checkpoint['trainable_dummy_token'] = True
+
+        if metrics is None:
+            metrics = {}
+
+        for k, v in metrics.items():
+            checkpoint[k] = v.item()
+
+        torch.save(checkpoint, model_save_path)
+        return
 
 
 def test_many_to_one():
