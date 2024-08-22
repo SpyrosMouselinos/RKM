@@ -1,4 +1,5 @@
 import numpy as np
+
 import torch
 import onnxruntime
 import gc
@@ -7,7 +8,7 @@ import gc
 class ModelServer:
     def __init__(self, model, model_path="./active_model/active_model.onnx", device=None):
         self.model = model
-        self.future_steps = self.model.future_steps
+        self.target_offset = self.model.target_offset
         self.mode = model.mode
         self.model_path = model_path
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -27,7 +28,7 @@ class ModelServer:
             print("Assuming many_to_one model conversion...\n")
             args = (input_tensor, None)
         elif self.mode == 'many_to_many':
-            target_offset = self.model.target_offset
+            target_offset = self.target_offset
             print("Assuming many_to_many model conversion...\n")
             args = (input_tensor, None, target_offset)
         else:
@@ -83,7 +84,7 @@ class ModelServer:
         if self.mode == 'many_to_many':
             # Many_to_many model input
             if future_steps is None:
-                future_steps = self.model.future_steps
+                future_steps = self.target_offset
             onnx_inputs[self.onnx_session.get_inputs()[1].name] = future_steps
 
         # Perform inference using the GPU (if CUDAExecutionProvider is set)
@@ -147,3 +148,88 @@ def test_initialize_and_convert():
         print("\nThe outputs from GPU and CPU are very close!")
     else:
         print("\nThe outputs from GPU and CPU differ.")
+
+
+def test_equivalent_outputs():
+    import json
+    import pandas as pd
+    from app.utils.data_processing import find_and_convert_date_column, TimeSeriesImputationDataset
+    from app.modeling.SimpleForcaster import SimpleForcaster
+    from torch.utils.data import DataLoader
+
+    # Assumes a pretrained model is available #
+    PRETRAINED_MODEL_PATH = "./models/model_4.pth"
+    PRETRAINED_MODEL_CONFIG = PRETRAINED_MODEL_PATH.replace(".pth", ".json")
+    DEVICE = 'cuda'
+
+    # Load the model
+    model = SimpleForcaster.load_from_checkpoint(checkpoint_path=PRETRAINED_MODEL_PATH, device=DEVICE)
+
+    # Assumes the existence of the training dataset in the /data/ folder
+    TRAINING_DATA_PATH = "./data/yahoo_stock.csv"
+
+    # Load the data from the CSV
+    data = find_and_convert_date_column(pd.read_csv(TRAINING_DATA_PATH))
+
+    # Extract the features and timestamps
+    timestamps = data["date"].values
+    features = data.drop("date", axis=1)
+
+    # Write a function that sorts the names of the columns alphabetically
+    features = features.reindex(sorted(features.columns), axis=1)
+
+    # Save the order of the columns in a list
+    column_order = list(features.columns)
+
+    # Convert it to numpy
+    features = features.values
+
+    # Initialize the dataset
+    dataset = TimeSeriesImputationDataset(features,
+                                          timestamps,
+                                          10,
+                                          column_names=column_order,
+                                          group_by='24H',
+                                          target_offset=2,
+                                          impute_backward=1)
+
+    # Split data into training and validation sets
+    train_size = int(0.8 * len(dataset))
+    val_size = len(dataset) - train_size
+    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+    val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False)
+
+    # Evaluate it on the validation set
+    outputs_gpu = []
+    outputs_onnx = []
+    model.eval()
+    with torch.no_grad():
+        for inputs, targets in val_loader:
+            inputs = inputs.to(DEVICE)
+            output = model(inputs).to('cpu').numpy()
+            # Output shape: (1, 2, 1)
+            # Reshape a flat list of batch_size items and append each one to the outputs list
+            outputs_gpu.extend(output.reshape(-1))
+
+    # Now convert it to ONNX as above and compare the outputs
+    device = torch.device("cpu")
+    model.to(device)
+    model_server = ModelServer(model, device=device)
+    model_server.convert_to_onnx(input_tensor=inputs)
+
+    for inputs, targets in val_loader:
+        output = model_server.infer(inputs.to('cpu'))
+        outputs_onnx.extend(output.reshape(-1))
+
+    # Convert the lists into numpy arrays
+    outputs_gpu = np.array(outputs_gpu)
+    outputs_onnx = np.array(outputs_onnx)
+
+    # Compare the outputs from GPU (non-ONNX) and CPU (ONNX) in numpy
+    if np.allclose(outputs_gpu, outputs_onnx, atol=1e-5):
+        print("\nThe outputs from GPU inference and ONNX inference are very close!")
+    else:
+        print("\nThe outputs from GPU inference and ONNX inference differ.")
+
+    print("GPU Outputs: {}".format(outputs_gpu[:10]))
+    print("ONNX Outputs: {}".format(outputs_onnx[:10]))

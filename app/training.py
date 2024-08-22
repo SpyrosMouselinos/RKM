@@ -156,7 +156,7 @@ def train_model(csv_file,
                 best_loss = val_loss
                 best_metrics = val_metrics
                 epochs_no_improve = 0
-                save_model_checkpoint(model, model_save_path, epoch + 1, best_loss, val_metrics)
+                save_model_checkpoint(model, model_save_path, epoch + 1, best_loss, best_metrics)
             else:
                 epochs_no_improve += 1
                 if epochs_no_improve >= early_stopping_patience:

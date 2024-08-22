@@ -43,7 +43,7 @@ class ManyToOneRecurrentBase(RecurrentBase):
 
     def forward(self, x, init_state=None):
         out, _ = self.recurrent(x, init_state)
-        return self.output(out[:, -1, :])
+        return self.output(out[:, -1:, :])
 
     def to(self, device):
         super(ManyToOneRecurrentBase, self).to(device)
@@ -210,7 +210,7 @@ def test_many_to_one():
     model = ManyToOneRecurrentBase(input_size=INPUT_SIZE, hidden_size=HIDDEN_SIZE, output_size=OUTPUT_SIZE)
     dummy_input = torch.randn(BATCH_SIZE, SEQUENCE_LENGTH, INPUT_SIZE)
     output = model(dummy_input)
-    assert output.shape == (BATCH_SIZE, OUTPUT_SIZE)
+    assert output.shape == (BATCH_SIZE, 1, OUTPUT_SIZE)
 
 
 def test_many_to_many():
@@ -261,3 +261,10 @@ def test_single_batch_timetest():
     time.sleep(1)
     end_anchor = time.time()
     print("\n1 Second reference time anchor: ", (end_anchor - start_anchor))
+
+# # Assumes a pretrained model is available #
+# PRETRAINED_MODEL_PATH = "../models/model_3.pth"
+# PRETRAINED_MODEL_CONFIG = PRETRAINED_MODEL_PATH.replace(".pth", ".json")
+# DEVICE = 'cpu'
+#
+# model = SimpleForcaster.load_from_checkpoint(checkpoint_path=PRETRAINED_MODEL_PATH, device=DEVICE)
