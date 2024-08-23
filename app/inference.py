@@ -17,3 +17,7 @@ dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False)
 for batch in dataloader:
     # Perform inference on the batch
     pass
+
+
+def inference(*args, **kwargs):
+    return True

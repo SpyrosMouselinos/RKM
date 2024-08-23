@@ -262,9 +262,3 @@ def test_single_batch_timetest():
     end_anchor = time.time()
     print("\n1 Second reference time anchor: ", (end_anchor - start_anchor))
 
-# # Assumes a pretrained model is available #
-# PRETRAINED_MODEL_PATH = "../models/model_3.pth"
-# PRETRAINED_MODEL_CONFIG = PRETRAINED_MODEL_PATH.replace(".pth", ".json")
-# DEVICE = 'cpu'
-#
-# model = SimpleForcaster.load_from_checkpoint(checkpoint_path=PRETRAINED_MODEL_PATH, device=DEVICE)

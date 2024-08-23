@@ -1,6 +1,6 @@
-# FastAPI backend and API routes
 import json
 
+import pandas as pd
 import torch
 from fastapi import FastAPI, Request, UploadFile, File, Form
 from fastapi.templating import Jinja2Templates
@@ -9,11 +9,22 @@ from fastapi.staticfiles import StaticFiles
 import os
 import shutil
 
+from app.inference import inference
 from app.model_manager import ModelServer
 from app.modeling.SimpleForcaster import SimpleForcaster
+from app.utils.data_processing import RealTimeTimeSeriesDataset
 from training import train_model
 
 app = FastAPI()
+
+# Global variable to keep track of the loaded model
+active_model = None
+
+# Global variable to keep track of the current inference data processing
+inference_data_processor = RealTimeTimeSeriesDataset(None,
+                                                     None,
+                                                     0,
+                                                     '1Y')
 
 # Mount the static directory to serve static files like CSS
 app.mount("/static", StaticFiles(directory="./static"), name="static")
@@ -110,16 +121,16 @@ async def upload_csv(file: UploadFile = File(...),
 
 @app.post("/model/{model_name}/activate")
 async def activate_model(model_name: str):
-    # Ensure there is no other active model before activation
-    active_model_path = os.path.join(ACTIVE_MODEL_DIR, "best_model.pth")
-    if os.path.exists(active_model_path):
-        return RedirectResponse("/", status_code=303)
+    global active_model
 
-    # Quantize the model (if needed) and move it to the active model directory
+    # Ensure there is no other active model before activation
+    if active_model is not None:
+        return {"error": "Another model is already active."}
+
+    # Load the model and move it to the active model directory
     model_path = os.path.join(MODEL_DIR, model_name)
     json_path = model_path.replace('.pth', '.json')
 
-    # Copy the model and JSON file to the active model directory
     if not os.path.exists(ACTIVE_MODEL_DIR):
         os.makedirs(ACTIVE_MODEL_DIR)
 
@@ -132,8 +143,32 @@ async def activate_model(model_name: str):
 
 @app.post("/model/{model_name}/start")
 async def start_model():
+    global inference_data_processor
+    # Load the model from the active model directory
     model_path = os.path.join(ACTIVE_MODEL_DIR, "best_model.pth")
     model = SimpleForcaster.load_from_checkpoint(model_path, device=torch.device("cpu"))
+
+    # Load its configuration json to get the features and their mean / variance values
+    json_path = os.path.join(ACTIVE_MODEL_DIR, "best_model.json")
+    with open(json_path, 'r') as f:
+        config = json.load(f)
+
+    # List of feature names
+    feautre_names = []
+
+    # New configuration file, containing only the features and their mean / variance values
+    feature_stats_config = {}
+
+    # Go over the items in the config, if they contain _mean or _std, load them
+    for k, v in config.items():
+        if "_mean" in k or "_std" in k:
+            # Take the key name before _mean or _std
+            k = k.split("_")[0]
+            # Add it to the list of feature names, if it does not already exist
+            if k not in feautre_names:
+                feautre_names.append(k)
+            # Make an dictionary entry with this name
+            feature_stats_config[k] = torch.tensor(v)
 
     # Signature of a fixed cpu input #
     fixed_input = torch.randn(1, 10, model.model.input_size, device=torch.device("cpu"))
@@ -141,6 +176,10 @@ async def start_model():
     # ONNX Conversion Process
     model_server = ModelServer(model=model, device=torch.device("cpu"))
     model_server.convert_to_onnx(fixed_input)
+
+    # Set up the inference data processor
+    inference_data_processor = RealTimeTimeSeriesDataset(feature_names=feautre_names,
+                                                         feature_stats=feature_stats_config)
 
     # Return the response to update the frontend
     return {"status": "online"}
@@ -155,6 +194,8 @@ async def stop_model(model_name: str):
 
 @app.post("/model/{model_name}/deactivate")
 async def deactivate_model(model_name: str):
+    global active_model
+
     # Deactivate the active model and delete it from the directory
     model_path = os.path.join(ACTIVE_MODEL_DIR, "best_model.pth")
     json_path = os.path.join(ACTIVE_MODEL_DIR, "best_model.json")
@@ -164,8 +205,41 @@ async def deactivate_model(model_name: str):
     if os.path.exists(json_path):
         os.remove(json_path)
 
+    # Clear the active model from memory
+    active_model = None
+
     # Redirect back to the home page
     return RedirectResponse("/", status_code=303)
+
+
+@app.post("/model/infer")
+async def infer(request: Request):
+    global active_model, inference_data_processor
+
+    # Check if there is an active model
+    if active_model is None:
+        return {"error": "No active model for inference."}
+
+    # Parse the JSON payload from the request
+    request_data = await request.json()
+
+    # Impute missing data in the incoming data point
+    request_data = inference_data_processor.impute_missing(request_data)
+
+    # Update the buffer with the scaled data point and remove old data
+    inference_data_processor.update_buffer(request_data)
+
+    # Get sequences ready for prediction
+    sequences, needed_points = inference_data_processor.get_current_sequences()
+
+    if sequences is None:
+        return {"error": f"Not enough data for inference. Need {needed_points} more points."}
+
+    # Perform inference for each sequence
+    predictions = []
+    for sequence in sequences:
+        pass
+    return {"predictions": predictions}
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
+from torch.utils.data import Dataset
 import torch
 import numpy as np
 import pandas as pd
-from torch.utils.data import Dataset
 
 
 class TimeSeriesImputationDataset(Dataset):
@@ -85,34 +85,140 @@ class TimeSeriesImputationDataset(Dataset):
 
 
 class RealTimeTimeSeriesDataset:
-    def __init__(self, sequence_length, mean_std=None):
-        self.sequence_length = sequence_length
+    def __init__(self, feature_names, feature_stats, sequence_length=10, timegroup_factor='24H'):
         self.buffer = []
-        self.mean_std = mean_std
+        self.sequence_length = sequence_length
+        self.timegroup_factor = timegroup_factor
+        self.feature_names = feature_names
+        self.feature_stats = feature_stats
+        self.date_feature = "date"  # Assumed name of the date feature
 
     def update_buffer(self, new_data_point):
-        self.buffer.append(new_data_point)
-        if len(self.buffer) > self.sequence_length:
-            self.buffer.pop(0)
+        """
+        Update the buffer with new data points, group them by the timegroup_factor,
+        and safely remove old data.
+        """
+        # Scale the new data point
+        scaled_data_point = self.normalize_data(new_data_point)
+
+        # Handle corrupted data by averaging forward and backward fill
+        self.correct_corrupted_data(scaled_data_point)
+
+        # Append the new data point to the buffer
+        self.buffer.append(scaled_data_point)
+
+        # Group data by the timegroup_factor
+        grouped_data = self.group_data_by_time()
+
+        # Update the buffer with the grouped data
+        self.buffer = grouped_data[-self.sequence_length:]  # Keep only the last 'sequence_length' groups
+
+        # Safely remove old data
+        self.remove_old_data()
+
+    def remove_old_data(self):
+        """
+        Remove data points from the buffer that are older than the required range.
+        """
+        if len(self.buffer) > 0:
+            # Convert the buffer to a DataFrame for easier manipulation
+            df = pd.DataFrame(self.buffer)
+            df[self.date_feature] = pd.to_datetime(df[self.date_feature])
+
+            # Convert the timegroup_factor to a timedelta
+            time_delta = pd.to_timedelta(self.timegroup_factor)
+
+            # Calculate the minimum allowed timestamp
+            max_time = df[self.date_feature].max()
+            min_allowed_time = max_time - (self.sequence_length * time_delta)
+
+            # Filter the buffer to keep only relevant data
+            self.buffer = df[df[self.date_feature] >= min_allowed_time].to_dict('records')
+
+    def correct_corrupted_data(self, data):
+        """
+        Correct corrupted data by averaging the forward fill and backward fill.
+        """
+        for feature in self.feature_names:
+            if pd.isna(data[feature]) or np.isinf(data[feature]):
+                # Perform forward fill
+                forward_value = self.forward_fill(feature)
+                # Perform backward fill
+                backward_value = self.backward_fill(feature)
+
+                # Take the average of forward and backward fill
+                data[feature] = (forward_value + backward_value) / 2
+
+    def forward_fill(self, feature):
+        """
+        Perform forward fill for the given feature.
+        """
+        for i in reversed(range(len(self.buffer))):
+            if not pd.isna(self.buffer[i][feature]) and not np.isinf(self.buffer[i][feature]):
+                return self.buffer[i][feature]
+        # If no valid value is found, return 0 as a default
+        return 0.0
+
+    def backward_fill(self, feature):
+        """
+        Perform backward fill for the given feature.
+        """
+        for i in range(len(self.buffer)):
+            if not pd.isna(self.buffer[i][feature]) and not np.isinf(self.buffer[i][feature]):
+                return self.buffer[i][feature]
+        # If no valid value is found, return 0 as a default
+        return 0.0
+
+    def group_data_by_time(self):
+        """
+        Group the buffer data by the timegroup_factor.
+        """
+        df = pd.DataFrame(self.buffer)
+        df[self.date_feature] = pd.to_datetime(df[self.date_feature])
+        df.set_index(self.date_feature, inplace=True)
+
+        # Group by the timegroup factor using mean
+        grouped = df.resample(self.timegroup_factor).mean().dropna()
+
+        return grouped.reset_index().to_dict('records')
 
     def normalize_data(self, data):
-        if self.mean_std:
-            return (data - self.mean_std['mean']) / self.mean_std['std']
-        else:
-            return data
+        """
+        Normalize the data using the mean and std from the config.
+        """
+        for feature in self.feature_names:
+            mean = self.feature_stats.get(f"{feature}_mean", torch.tensor(0.0))
+            std = self.feature_stats.get(f"{feature}_std", torch.tensor(1.0))
+            data[feature] = (data[feature] - mean.item()) / std.item()
+        return data
 
-    def get_current_sequence(self):
-        if len(self.buffer) == self.sequence_length:
-            return torch.tensor(self.normalize_data(np.array(self.buffer)), dtype=torch.float32)
-        else:
-            return None
+    def get_current_sequences(self):
+        """
+        Get sequences ready for prediction. Returns a list of sequences.
+        """
+        if len(self.buffer) < self.sequence_length:
+            return None, self.sequence_length - len(self.buffer)
+
+        # Normalize the data in the buffer
+        normalized_data = [self.normalize_data(data_point) for data_point in self.buffer]
+
+        # Create sequences of length 'sequence_length'
+        sequences = []
+        for i in range(len(normalized_data) - self.sequence_length + 1):
+            sequence = normalized_data[i:i + self.sequence_length]
+            sequences.append(torch.tensor([list(dp.values()) for dp in sequence], dtype=torch.float32))
+
+        return sequences, 0
 
     def impute_missing(self, data_point):
+        """
+        Impute missing values in a data point using the last valid data point in the buffer.
+        """
         if len(self.buffer) > 0:
             last_valid = self.buffer[-1]
-            for i in range(len(data_point)):
-                if np.isnan(data_point[i]):
-                    data_point[i] = last_valid[i]
+            for feature in self.feature_names:
+                if pd.isna(data_point[feature]):
+                    data_point[feature] = last_valid.get(feature, 0.0)
         return data_point
 
 
