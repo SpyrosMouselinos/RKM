@@ -1,2 +1,1 @@
-# Trading Signals Project
-
+# ML Deployment Demo Project
