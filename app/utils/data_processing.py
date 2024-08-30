@@ -5,6 +5,17 @@ import pandas as pd
 
 
 class TimeSeriesImputationDataset(Dataset):
+    """
+    A PyTorch Dataset for time series data imputation.
+
+    @param data: The time series data as a NumPy array.
+    @param timestamps: The timestamps corresponding to the data.
+    @param sequence_length: The length of sequences used for training.
+    @param column_names: Optional list of column names in the data.
+    @param group_by: The frequency to group the data (e.g., 'seconds', 'minutes').
+    @param target_offset: The offset for the target variable.
+    @param impute_backward: The number of periods to fill forward during imputation.
+    """
     def __init__(self, data, timestamps, sequence_length, column_names=None, group_by='seconds',
                  target_offset=1, impute_backward=10):
         self.column_names = column_names
@@ -25,14 +36,30 @@ class TimeSeriesImputationDataset(Dataset):
         self.valid_indices = self.find_valid_sequence_starts()
 
     def calculate_mean_std(self):
+        """
+        Calculate the mean and standard deviation for normalization.
+
+        @return: A dictionary with 'mean' and 'std' keys containing the mean and standard deviation.
+        """
         means = np.nanmean(self.data, axis=0)
         stds = np.nanstd(self.data, axis=0)
         return {'mean': means, 'std': stds}
 
     def normalize_data(self, data):
+        """
+        Normalize the data using the mean and standard deviation.
+
+        @param data: The data to normalize.
+        @return: The normalized data.
+        """
         return (data - self.mean_std['mean']) / self.mean_std['std']
 
     def group_and_impute(self):
+        """
+        Group the data by the specified frequency and impute missing values.
+
+        @return: A tuple containing the grouped and imputed data, and a set of timestamps with NaN values.
+        """
         df = pd.DataFrame(self.data, index=self.timestamps)
         df = df.resample(self.group_by).mean()
         for col in df.columns:
@@ -43,6 +70,11 @@ class TimeSeriesImputationDataset(Dataset):
         return df[valid_rows], set(invalid_timestamps)
 
     def find_valid_sequence_starts(self):
+        """
+        Find the start indices of valid sequences in the data.
+
+        @return: A list of valid start indices for sequences.
+        """
         valid_indices = []
         for i in range(len(self.data) - self.sequence_length - self.target_offset + 1):
             # Get the start and end timestamps for the current sequence
@@ -58,6 +90,11 @@ class TimeSeriesImputationDataset(Dataset):
 
     @property
     def feature_stats(self):
+        """
+        Get the mean and standard deviation statistics for features.
+
+        @return: A dictionary with feature names and their mean and std values.
+        """
         fs = {}
         if self.column_names is None:
             return self.mean_std
@@ -69,9 +106,20 @@ class TimeSeriesImputationDataset(Dataset):
         return fs
 
     def __len__(self):
+        """
+        Get the number of valid sequences.
+
+        @return: The number of valid sequences.
+        """
         return len(self.valid_indices)
 
     def __getitem__(self, idx):
+        """
+        Get a sequence and its corresponding target.
+
+        @param idx: The index of the sequence to retrieve.
+        @return: A tuple containing the input tensor and the target tensor.
+        """
         start_idx = self.valid_indices[idx]
         end_idx = start_idx + self.sequence_length
 
@@ -85,6 +133,14 @@ class TimeSeriesImputationDataset(Dataset):
 
 
 class RealTimeTimeSeriesDataset:
+    """
+    A class for handling real-time time series data, including normalization and buffering.
+
+    @param feature_names: The names of the features in the dataset.
+    @param feature_stats: The mean and standard deviation for normalization.
+    @param sequence_length: The length of sequences used for prediction.
+    @param timegroup_factor: The frequency to group the data (e.g., '24H').
+    """
     def __init__(self, feature_names, feature_stats, sequence_length=10, timegroup_factor='24H'):
         self.buffer = []
         self.sequence_length = sequence_length
@@ -97,6 +153,8 @@ class RealTimeTimeSeriesDataset:
         """
         Update the buffer with new data points, group them by the timegroup_factor,
         and safely remove old data.
+
+        @param new_data_point: The new data point to add to the buffer.
         """
         # Scale the new data point
         scaled_data_point = self.normalize_data(new_data_point)
@@ -138,6 +196,8 @@ class RealTimeTimeSeriesDataset:
     def correct_corrupted_data(self, data):
         """
         Correct corrupted data by averaging the forward fill and backward fill.
+
+        @param data: The data point with possible corrupted values.
         """
         for feature in self.feature_names:
             if pd.isna(data[feature]) or np.isinf(data[feature]):
@@ -152,6 +212,9 @@ class RealTimeTimeSeriesDataset:
     def forward_fill(self, feature):
         """
         Perform forward fill for the given feature.
+
+        @param feature: The feature name to forward fill.
+        @return: The forward-filled value for the feature.
         """
         for i in reversed(range(len(self.buffer))):
             if not pd.isna(self.buffer[i][feature]) and not np.isinf(self.buffer[i][feature]):
@@ -162,6 +225,9 @@ class RealTimeTimeSeriesDataset:
     def backward_fill(self, feature):
         """
         Perform backward fill for the given feature.
+
+        @param feature: The feature name to backward fill.
+        @return: The backward-filled value for the feature.
         """
         for i in range(len(self.buffer)):
             if not pd.isna(self.buffer[i][feature]) and not np.isinf(self.buffer[i][feature]):
@@ -172,6 +238,8 @@ class RealTimeTimeSeriesDataset:
     def group_data_by_time(self):
         """
         Group the buffer data by the timegroup_factor.
+
+        @return: A list of dictionaries with the grouped data.
         """
         df = pd.DataFrame(self.buffer)
         df[self.date_feature] = pd.to_datetime(df[self.date_feature])
@@ -185,6 +253,9 @@ class RealTimeTimeSeriesDataset:
     def normalize_data(self, data):
         """
         Normalize the data using the mean and std from the config.
+
+        @param data: The data point to normalize.
+        @return: The normalized data point.
         """
         for feature in self.feature_names:
             mean = self.feature_stats.get(f"{feature}_mean", torch.tensor(0.0))
@@ -195,6 +266,8 @@ class RealTimeTimeSeriesDataset:
     def get_current_sequences(self):
         """
         Get sequences ready for prediction. Returns a list of sequences.
+
+        @return: A tuple containing a list of sequences and the number of sequences needed to reach the required length.
         """
         if len(self.buffer) < self.sequence_length:
             return None, self.sequence_length - len(self.buffer)
@@ -210,9 +283,12 @@ class RealTimeTimeSeriesDataset:
 
         return sequences, 0
 
-    def impute_missing(self, data_point):
+    def format_incoming_values(self, data_point):
         """
         Impute missing values in a data point using the last valid data point in the buffer.
+
+        @param data_point: The data point with possible missing values.
+        @return: The data point with imputed values.
         """
         if len(self.buffer) > 0:
             last_valid = self.buffer[-1]
@@ -223,6 +299,12 @@ class RealTimeTimeSeriesDataset:
 
 
 def find_and_convert_date_column(df):
+    """
+    Find and convert the most likely date column in a DataFrame to a 'date' column.
+
+    @param df: The DataFrame to process.
+    @return: The DataFrame with the identified date column renamed to 'date'.
+    """
     # List of common date-related keywords
     date_keywords = ['date', 'year', 'month', 'day', 'time']
 
@@ -243,3 +325,52 @@ def find_and_convert_date_column(df):
             break  # We rename only the first identified date column
 
     return df
+
+
+# Test of incoming values imputation
+def test_incoming_values_imputation():
+    """
+    Test the imputation of incoming values using a sample RealTimeTimeSeriesDataset.
+
+    This function initializes a RealTimeTimeSeriesDataset, reads a sample CSV file,
+    and formats the incoming values for testing the imputation functionality.
+    """
+    import random
+
+    # Initialize a RealTimeDataset
+    rttsd = RealTimeTimeSeriesDataset(feature_names=['High', 'Low'],
+                                      feature_stats={'High_mean': 0.0,
+                                                     'Low_mean': 0.0,
+                                                     'High_std': 1000.0,
+                                                     'Low_std': 1000.0},
+                                      sequence_length=10,
+                                      timegroup_factor='24H')
+
+    # Read the CSV file from /data/
+    df = pd.read_csv('../data/yahoo_stock.csv')
+
+    # Keep an index of current rows elapsed
+    index = 0
+
+    # In a loop, until the end of the dataset
+    while index < len(df):
+        # Take a single row from the dataset
+        data_point = df.iloc[index]
+
+        # Format it as a JSON-like dicitonary
+        data_point = data_point.to_dict()
+
+        # Add a random-named feature with a random integer value
+        data_point['random_feature'] = random.randint(0, 10)
+
+        # Order the features in reverse alphabetical order
+        data_point = {k: v for k, v in sorted(data_point.items(), key=lambda item: item[0], reverse=True)}
+
+        # Format the incoming values
+        data_point = rttsd.format_incoming_values(data_point)
+
+        # Add it to the buffer
+        rttsd.buffer.append(data_point)
+
+        # Increment the index
+        index += 1

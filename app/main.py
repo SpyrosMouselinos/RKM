@@ -1,6 +1,4 @@
 import json
-
-import pandas as pd
 import torch
 from fastapi import FastAPI, Request, UploadFile, File, Form
 from fastapi.templating import Jinja2Templates
@@ -9,10 +7,10 @@ from fastapi.staticfiles import StaticFiles
 import os
 import shutil
 
-from app.inference import inference
-from app.model_manager import ModelServer
-from app.modeling.SimpleForcaster import SimpleForcaster
-from app.utils.data_processing import RealTimeTimeSeriesDataset
+from app.utils.generate_docs import generate_documentation_if_needed
+from model_manager import ModelServer
+from modeling.SimpleForcaster import SimpleForcaster
+from utils.data_processing import RealTimeTimeSeriesDataset
 from training import train_model
 
 app = FastAPI()
@@ -29,6 +27,14 @@ inference_data_processor = RealTimeTimeSeriesDataset(None,
 # Mount the static directory to serve static files like CSS
 app.mount("/static", StaticFiles(directory="./static"), name="static")
 
+# Mount the doxygen HTML directory to serve documentation files
+try:
+    generate_documentation_if_needed()
+    app.mount("/documentation", StaticFiles(directory="../doxygen/html"), name="documentation")
+except FileNotFoundError:
+    print("Failed to generate documentation. Documentation files not found.")
+    pass
+
 # Set up template directory
 templates = Jinja2Templates(directory="./templates")
 
@@ -39,6 +45,12 @@ ACTIVE_MODEL_DIR = "./active_model"
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
+    """
+    Endpoint to render the homepage with a list of models and their metrics.
+
+    @param request: The incoming HTTP request.
+    @return: An HTML response rendering the homepage template with model data.
+    """
     # List all models
     models = [f for f in os.listdir(MODEL_DIR) if f.endswith('.pth')]
 
@@ -95,6 +107,23 @@ async def upload_csv(file: UploadFile = File(...),
                      group_by: str = Form(...),
                      eval_every: int = Form(...),
                      early_stopping_patience: int = Form(...)):
+    """
+    Endpoint to upload a CSV file for training a model with specified parameters.
+
+    @param file: The CSV file to upload.
+    @param m_name: The name of the model to save.
+    @param mode: The mode of training (e.g., 'regression').
+    @param sequence_length: The length of sequences for training.
+    @param target_offset: The target offset for training.
+    @param batch_size: The batch size for training.
+    @param num_epochs: The number of epochs for training.
+    @param learning_rate: The learning rate for training.
+    @param impute_backward: The number of periods to impute backward.
+    @param group_by: The frequency to group the data (e.g., '1H').
+    @param eval_every: The number of steps between evaluations.
+    @param early_stopping_patience: The patience for early stopping.
+    @return: A redirection response to the homepage.
+    """
     # Save the uploaded CSV file
     file_path = os.path.join("./data", file.filename)
     with open(file_path, "wb") as f:
@@ -121,6 +150,12 @@ async def upload_csv(file: UploadFile = File(...),
 
 @app.post("/model/{model_name}/activate")
 async def activate_model(model_name: str):
+    """
+    Endpoint to activate a model by copying it to the active model directory.
+
+    @param model_name: The name of the model to activate.
+    @return: A redirection response to the homepage.
+    """
     global active_model
 
     # Ensure there is no other active model before activation
@@ -143,6 +178,11 @@ async def activate_model(model_name: str):
 
 @app.post("/model/{model_name}/start")
 async def start_model():
+    """
+    Endpoint to start a model by converting it to ONNX format and setting up inference.
+
+    @return: A JSON response indicating the status of the model.
+    """
     global inference_data_processor
     # Load the model from the active model directory
     model_path = os.path.join(ACTIVE_MODEL_DIR, "best_model.pth")
@@ -154,7 +194,7 @@ async def start_model():
         config = json.load(f)
 
     # List of feature names
-    feautre_names = []
+    feature_names = []
 
     # New configuration file, containing only the features and their mean / variance values
     feature_stats_config = {}
@@ -165,9 +205,9 @@ async def start_model():
             # Take the key name before _mean or _std
             k = k.split("_")[0]
             # Add it to the list of feature names, if it does not already exist
-            if k not in feautre_names:
-                feautre_names.append(k)
-            # Make an dictionary entry with this name
+            if k not in feature_names:
+                feature_names.append(k)
+            # Make a dictionary entry with this name
             feature_stats_config[k] = torch.tensor(v)
 
     # Signature of a fixed cpu input #
@@ -178,7 +218,7 @@ async def start_model():
     model_server.convert_to_onnx(fixed_input)
 
     # Set up the inference data processor
-    inference_data_processor = RealTimeTimeSeriesDataset(feature_names=feautre_names,
+    inference_data_processor = RealTimeTimeSeriesDataset(feature_names=feature_names,
                                                          feature_stats=feature_stats_config)
 
     # Return the response to update the frontend
@@ -187,6 +227,12 @@ async def start_model():
 
 @app.post("/model/{model_name}/stop")
 async def stop_model(model_name: str):
+    """
+    Endpoint to stop a model (placeholder functionality).
+
+    @param model_name: The name of the model to stop.
+    @return: A redirection response to the homepage.
+    """
     # Logic to stop the model (e.g., remove it from the GPU or stop serving it)
     # In this placeholder, we simply redirect back to the home page.
     return RedirectResponse("/", status_code=303)
@@ -194,6 +240,12 @@ async def stop_model(model_name: str):
 
 @app.post("/model/{model_name}/deactivate")
 async def deactivate_model(model_name: str):
+    """
+    Endpoint to deactivate a model by removing it from the active model directory.
+
+    @param model_name: The name of the model to deactivate.
+    @return: A redirection response to the homepage.
+    """
     global active_model
 
     # Deactivate the active model and delete it from the directory
@@ -214,6 +266,12 @@ async def deactivate_model(model_name: str):
 
 @app.post("/model/infer")
 async def infer(request: Request):
+    """
+    Endpoint to perform inference using the active model.
+
+    @param request: The incoming HTTP request containing the data for inference.
+    @return: A JSON response with the model's predictions or an error message if not enough data is provided.
+    """
     global active_model, inference_data_processor
 
     # Check if there is an active model
@@ -237,9 +295,13 @@ async def infer(request: Request):
 
     # Perform inference for each sequence
     predictions = []
-    for sequence in sequences:
-        pass
+
     return {"predictions": predictions}
+
+
+@app.get("/documentation/", response_class=HTMLResponse)
+async def serve_documentation(request: Request):
+    return RedirectResponse(url="/documentation/index.html")
 
 
 if __name__ == "__main__":

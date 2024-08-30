@@ -29,6 +29,23 @@ def train_model(csv_file,
                 eval_every=1,
                 early_stopping_patience=5,
                 use_cuda=True):
+    """
+    Trains a model using the specified parameters, saves checkpoints, and applies early stopping.
+
+    @param csv_file: Path to the CSV file containing the training data.
+    @param model_save_path: Path where the trained model will be saved.
+    @param mode: Mode of the model ('many_to_one' or 'many_to_many').
+    @param sequence_length: Length of the input sequence.
+    @param target_offset: Offset for target values in 'many_to_many' mode.
+    @param batch_size: Batch size for training.
+    @param num_epochs: Number of epochs for training.
+    @param learning_rate: Learning rate for the optimizer.
+    @param impute_backward: Number of past steps to impute in the dataset.
+    @param group_by: Frequency for grouping time series data (e.g., '24H').
+    @param eval_every: Frequency (in epochs) for evaluating the model.
+    @param early_stopping_patience: Number of epochs with no improvement to trigger early stopping.
+    @param use_cuda: Flag to indicate if GPU should be used if available.
+    """
     # Load the data from the CSV
     data = find_and_convert_date_column(pd.read_csv(csv_file))
 
@@ -36,13 +53,13 @@ def train_model(csv_file,
     timestamps = data["date"].values
     features = data.drop("date", axis=1)
 
-    # Write a function that sorts the names of the columns alphabetically
+    # Sort the names of the columns alphabetically
     features = features.reindex(sorted(features.columns), axis=1)
 
     # Save the order of the columns in a list
     column_order = list(features.columns)
 
-    # Convert it to numpy
+    # Convert features to numpy array
     features = features.values
 
     # Initialize the dataset
@@ -70,8 +87,7 @@ def train_model(csv_file,
                             input_size=input_size,
                             hidden_size=128,
                             output_size=output_size,
-                            target_offset=target_offset,
-                            )
+                            target_offset=target_offset)
 
     # Move model to GPU if available
     device = torch.device("cuda" if use_cuda and torch.cuda.is_available() else "cpu")
@@ -80,7 +96,7 @@ def train_model(csv_file,
     # Define loss, optimizer, and scheduler
     criterion = nn.MSELoss()
 
-    # Define the metrics using MetricCollection
+    # Define metrics using MetricCollection
     metrics = MetricCollection({
         'mse': MeanSquaredError().to(device),
         'mape': MeanAbsolutePercentageError().to(device)
@@ -89,7 +105,7 @@ def train_model(csv_file,
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs)
 
-    # For mixed precision training
+    # Initialize GradScaler for mixed precision training
     scaler = GradScaler(device=device.type)
 
     # Initialize variables for checkpointing and early stopping
@@ -129,12 +145,12 @@ def train_model(csv_file,
         # Compute metrics
         avg_train_metrics = metrics.compute()
 
-        # Print the epoch, the training loss
+        # Print the epoch and training loss
         print(
             f"Epoch [{epoch + 1}/{num_epochs}],"
             f" Training Loss: {avg_train_loss:.4f}")
 
-        # Print for each entry of the training metrics
+        # Print each entry of the training metrics
         for k, v in avg_train_metrics.items():
             print(f" Training {k}: {v:.4f}")
 
@@ -142,12 +158,12 @@ def train_model(csv_file,
         if (epoch + 1) % eval_every == 0:
             val_loss, val_metrics = evaluate_model(model, val_loader, criterion, metrics, device)
 
-            # Print the epoch, the validation loss
+            # Print the epoch and validation loss
             print(
                 f"Epoch [{epoch + 1}/{num_epochs}],"
                 f" Validation Loss: {val_loss:.4f}")
 
-            # Print for each entry of the validation metrics
+            # Print each entry of the validation metrics
             for k, v in val_metrics.items():
                 print(f" Validation {k}: {v:.4f}")
 
@@ -167,6 +183,16 @@ def train_model(csv_file,
 
 
 def evaluate_model(model, val_loader, criterion, metrics, device):
+    """
+    Evaluates the model on the validation set.
+
+    @param model: The model to be evaluated.
+    @param val_loader: DataLoader for the validation dataset.
+    @param criterion: Loss function used for evaluation.
+    @param metrics: Metrics for evaluating model performance.
+    @param device: Device on which the model and data are located (CPU or GPU).
+    @return: Tuple containing average validation loss and metrics.
+    """
     model.eval()
     val_loss = 0.0
     metrics = metrics.to(device)  # Ensure metrics are on the correct device
@@ -187,6 +213,15 @@ def evaluate_model(model, val_loader, criterion, metrics, device):
 
 
 def save_model_checkpoint(model, model_save_path, epoch, loss, metrics):
+    """
+    Saves the model checkpoint and deletes previous checkpoints.
+
+    @param model: The model to be saved.
+    @param model_save_path: Path where the checkpoint will be saved.
+    @param epoch: Current epoch number.
+    @param loss: Loss value at the current epoch.
+    @param metrics: Metrics at the current epoch.
+    """
     # Define the path for the new checkpoint
     checkpoint_path = model_save_path.replace('.pth', f'_checkpoint_epoch_{epoch}.pth')
 
@@ -205,6 +240,14 @@ def save_model_checkpoint(model, model_save_path, epoch, loss, metrics):
 
 
 def save_final_model(loss, metrics, feature_stats, save_dir="checkpoints"):
+    """
+    Saves the final model and metrics after training.
+
+    @param loss: Best validation loss achieved during training.
+    @param metrics: Best validation metrics achieved during training.
+    @param feature_stats: Statistics of features used in training.
+    @param save_dir: Directory where the final model and metrics will be saved.
+    """
     # Locate the checkpoint model
     checkpoint_model = None
     for filename in os.listdir(save_dir):

@@ -1,0 +1,10 @@
+glob2
+torchmetrics
+pandas
+onnx
+onnxruntime
+numpy
+fastapi
+jinja2
+uvicorn
+python-multipart

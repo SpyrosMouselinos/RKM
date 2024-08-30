@@ -1,70 +1,56 @@
 /* General Styles */
 body {
-    font-family: Arial, sans-serif;
+    font-family: 'Roboto', sans-serif;
     margin: 0;
     padding: 0;
-    background-image: url('background.gif');
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
-    background-attachment: fixed;
-    color: white;
-}
-
-#content {
-    position: relative;
-    z-index: 2;
-    color: white;
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+    color: #e5e5e5; /* Adjusted for Vapor's neon color scheme */
+    line-height: 1.6;
+    background-color: #121212; /* Set a dark background color */
 }
 
 header {
     text-align: center;
-    margin-bottom: 40px;
+    padding: 20px 0;
+    background: rgba(0, 0, 0, 0.5);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
 }
 
 h1 {
     font-size: 2.5em;
-    color: white; /* Or #333 depending on desired design */
+    color: #e5e5e5; /* Match text color with Vapor theme */
+    margin: 0;
 }
 
 h2 {
     font-size: 1.75em;
-    color: white; /* Or #333 depending on desired design */
+    color: #e5e5e5;
     margin-bottom: 20px;
+    text-align: center;
 }
 
-/* Form Styles */
-form {
-    margin-bottom: 40px;
-}
-
-input[type="file"] {
-    padding: 10px;
-    font-size: 1em;
-}
-
+/* Button Styles */
 button {
-    padding: 10px 15px;
-    background-color: #4CAF50;
+    background-color: #2ecc71; /* Vibrant green */
     color: white;
     border: none;
     border-radius: 5px;
-    font-size: 1em;
+    padding: 10px 20px;
+    font-size: 1rem;
     cursor: pointer;
     transition: background-color 0.3s ease;
-    margin-left: 10px;
 }
 
 button:hover {
-    background-color: #45a049;
+    background-color: #27ae60; /* Slightly darker green on hover */
 }
 
 button:disabled {
-    background-color: #ccc;
-    color: #666;
+    background-color: #555555; /* Darker gray */
+    color: #999999; /* Light gray for disabled text */
     cursor: not-allowed;
-    border: 1px solid #999;
+    border: 1px solid #777777;
 }
 
 /* Table Styles */
@@ -72,100 +58,43 @@ table {
     width: 100%;
     border-collapse: collapse;
     margin-top: 20px;
-    background-color: rgba(255, 255, 255, 0.9); /* Changed to match first declaration */
-    box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
-}
-
-thead {
-    background-color: rgba(76, 175, 80, 0.9); /* Or #4CAF50 */
-    color: white;
+    background-color: #212529; /* Dark background for tables */
+    color: #e5e5e5;
 }
 
 th, td {
-    padding: 15px;
-    text-align: left;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.1); /* Or #ddd */
+    padding: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1); /* Lighter border color */
 }
 
-tr:hover {
-    background-color: rgba(241, 241, 241, 0.9); /* Or #f1f1f1 */
-}
-
-th {
-    background-color: rgba(76, 175, 80, 0.9); /* Or #4CAF50 */
+thead {
+    background-color: #6f42c1; /* Vibrant purple for table headers */
     color: white;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
 }
 
-td {
-    color: #555;
-}
-
-strong {
-    color: #4CAF50;
-}
-
-/* Footer Styles */
+/* Minimal Footer Styles */
 footer {
     text-align: center;
-    margin-top: 40px;
-    color: white; /* Or #888 */
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
-}
-
-
-/* The Modal (background) */
-.modal {
-    display: none; /* Hidden by default */
-    position: fixed; /* Stay in place */
-    z-index: 1000; /* Sit on top */
-    left: 0;
-    top: 0;
-    width: 100%; /* Full width */
-    height: 100%; /* Full height */
-    overflow: auto; /* Enable scroll if needed */
-    background-color: rgb(0,0,0); /* Fallback color */
-    background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
-    padding-top: 60px; /* Padding at the top */
-}
-
-/* Modal Content/Box */
-.modal-content {
-    background-color: #fefefe; /* Light background color */
-    color: #000000; /* Black text color */
-    margin: 5% auto; /* 5% from the top and centered */
     padding: 20px;
-    border: 1px solid #888;
-    width: 80%; /* Could be more or less, depending on screen size */
-    max-width: 600px; /* Set a maximum width */
-    z-index: 1001; /* Ensure it is on top of the modal background */
-    box-shadow: 0px 0px 10px rgba(0,0,0,0.5); /* Add a shadow for depth */
+    background: rgba(0, 0, 0, 0.5);
+    color: #e5e5e5;
+    position: relative;
+    bottom: 0;
+    width: 100%;
 }
 
-/* Close button styling */
-.close {
-    color: #aaa;
-    float: right;
-    font-size: 28px;
-    font-weight: bold;
-}
+/* Media Queries for Responsiveness */
+@media (max-width: 768px) {
+    h1 {
+        font-size: 2em;
+    }
 
-.close:hover,
-.close:focus {
-    color: black;
-    text-decoration: none;
-    cursor: pointer;
-}
+    h2 {
+        font-size: 1.5em;
+    }
 
-/* Input fields styling */
-.modal-content input[type="text"],
-.modal-content input[type="number"],
-.modal-content select {
-    color: #000000; /* Ensure text inside input fields is black */
-}
-
-/* Labels and other text */
-.modal-content label {
-    color: #000000; /* Ensure labels and any text in the modal are black */
+    th, td {
+        font-size: 0.9em;
+        padding: 10px;
+    }
 }

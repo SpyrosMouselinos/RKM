@@ -4,159 +4,205 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Model Management Dashboard</title>
-    <link rel="stylesheet" href="../static/style.css">
+    <!-- Include the Vapor theme from Bootswatch -->
+    <link href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/vapor/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="../static/style.css"> <!-- Optional: for any custom styles -->
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
 </head>
 <body>
-<header>
-    <h1>Model Management Dashboard</h1>
+<header class="bg-dark text-white py-3 mb-4">
+    <div class="container">
+        <h1 class="text-center">Model Management Dashboard</h1>
+    </div>
 </header>
 
-<section>
-    <h2>Upload CSV to Train a New Model</h2>
-    <button onclick="showModal()">Upload and Train</button>
+<nav class="container mb-4">
+    <a href="/documentation/index.html" target="_blank" class="btn btn-primary">View Documentation</a>
+</nav>
+
+<section class="container mb-5">
+    <h2 class="text-center">Upload CSV to Train a New Model</h2>
+    <div class="text-center">
+        <button class="btn btn-success" onclick="showModal()">Upload and Train</button>
+    </div>
 </section>
 
-<section>
-    <h2>Available Models</h2>
+<section class="container mb-5">
+    <h2 class="text-center">Available Models</h2>
     {% if models %}
-    <table>
-        <thead>
-        <tr>
-            <th>Model</th>
-            <th>MAPE</th>
-            <th>Loss</th>
-            <th>Actions</th>
-        </tr>
-        </thead>
-        <tbody>
-        {% for model in models %}
-        {% if model != active_model %}
-        <tr>
-            <td>{{ model }}</td>
-            <td>{{ model_metrics[model]['mape'] if model in model_metrics else 'N/A' }}</td>
-            <td>{{ model_metrics[model]['loss'] if model in model_metrics else 'N/A' }}</td>
-            <td>
-                <form action="/model/{{ model }}/activate" method="post">
-                    <button type="submit" {% if active_model %}disabled{% endif %}>Activate</button>
-                </form>
-            </td>
-        </tr>
-        {% endif %}
-        {% endfor %}
-        </tbody>
-    </table>
+    <div class="table-responsive">
+        <table class="table table-hover table-bordered">
+            <thead class="table-primary">
+            <tr>
+                <th>Model</th>
+                <th>MAPE</th>
+                <th>Loss</th>
+                <th>Actions</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for model in models %}
+            {% if model != active_model %}
+            <tr>
+                <td>{{ model }}</td>
+                <td>{{ model_metrics[model]['mape'] if model in model_metrics else 'N/A' }}</td>
+                <td>{{ model_metrics[model]['loss'] if model in model_metrics else 'N/A' }}</td>
+                <td>
+                    <form action="/model/{{ model }}/activate" method="post">
+                        <button type="submit" class="btn btn-primary btn-custom" {% if active_model %}disabled{% endif %}>Activate</button>
+                    </form>
+                </td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
     {% else %}
-    <p>No models available. Please upload a CSV to train a new model.</p>
+    <p class="text-center">No models available. Please upload a CSV to train a new model.</p>
     {% endif %}
 </section>
 
-<section>
-    <h2>Active Model</h2>
+<section class="container mb-5">
+    <h2 class="text-center">Active Model</h2>
     {% if active_model %}
-    <table>
-        <thead>
-        <tr>
-            <th>Model</th>
-            <th>MAPE</th>
-            <th>Loss</th>
-            <th>Status</th>
-            <th>Actions</th>
-        </tr>
-        </thead>
-        <tbody>
-        <tr>
-            <td>{{ active_model }}</td>
-            <td>{{ active_model_metrics['mape'] if 'mape' in active_model_metrics else 'N/A' }}</td>
-            <td>{{ active_model_metrics['loss'] if 'loss' in active_model_metrics else 'N/A' }}</td>
-            <td id="status">Stopped</td>
-            <td>
-                <form id="start-stop-form" action="/model/{{ active_model }}/start" method="post">
-                    <button id="start-stop-btn" type="submit">Start</button>
-                </form>
-                <form action="/model/{{ active_model }}/deactivate" method="post">
-                    <button type="submit">Stop & Deactivate</button>
-                </form>
-            </td>
-        </tr>
-        </tbody>
-    </table>
+    <div class="table-responsive">
+        <table class="table table-hover table-bordered">
+            <thead class="table-primary">
+            <tr>
+                <th>Model</th>
+                <th>MAPE</th>
+                <th>Loss</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <td>{{ active_model }}</td>
+                <td>{{ active_model_metrics['mape'] if 'mape' in active_model_metrics else 'N/A' }}</td>
+                <td>{{ active_model_metrics['loss'] if 'loss' in active_model_metrics else 'N/A' }}</td>
+                <td id="status">Stopped</td>
+                <td>
+                    <form id="start-stop-form" action="/model/{{ active_model }}/start" method="post">
+                        <button id="start-stop-btn" type="submit" class="btn btn-success btn-custom">Start</button>
+                    </form>
+                    <form action="/model/{{ active_model }}/deactivate" method="post">
+                        <button type="submit" class="btn btn-danger btn-custom">Stop & Deactivate</button>
+                    </form>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
     {% else %}
-    <p>No active model.</p>
+    <p class="text-center">No active model.</p>
     {% endif %}
 </section>
 
 <!-- Modal for Model Configuration -->
-<div id="modelConfigModal" class="modal" style="display:none;">
-    <div class="modal-content">
-        <span class="close" onclick="closeModal()">&times;</span>
-        <form id="upload-form" action="/upload-csv/" method="post" enctype="multipart/form-data">
-            <label for="file">Choose CSV file:</label>
-            <input type="file" id="file" name="file" accept=".csv" required><br><br>
+<div id="modelConfigModal" class="modal fade" tabindex="-1" aria-labelledby="modelConfigModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modelConfigModalLabel">Model Configuration</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="upload-form" action="/upload-csv/" method="post" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="file" class="form-label">Choose CSV file:</label>
+                        <input type="file" id="file" name="file" accept=".csv" class="form-control" required>
+                    </div>
 
-            <label for="model_name">Model Name:</label>
-            <input type="text" id="model_name" name="m_name" required><br><br>
+                    <div class="mb-3">
+                        <label for="model_name" class="form-label">Model Name:</label>
+                        <input type="text" id="model_name" name="m_name" class="form-control" required>
+                    </div>
 
-            <label for="mode">Model Mode of Operation:</label>
-            <select id="mode" name="mode">
-                <option value="many_to_one">many_to_one</option>
-                <option value="many_to_many">many_to_many</option>
-            </select><br><br>
+                    <div class="mb-3">
+                        <label for="mode" class="form-label">Model Mode of Operation:</label>
+                        <select id="mode" name="mode" class="form-select">
+                            <option value="many_to_one">many_to_one</option>
+                            <option value="many_to_many">many_to_many</option>
+                        </select>
+                    </div>
 
-            <label for="sequence_length">Sequence Length (10-256):</label>
-            <input type="range" id="sequence_length" name="sequence_length" min="10" max="256" value="10" oninput="this.nextElementSibling.value = this.value">
-            <input type="number" min="10" max="256" value="10" oninput="this.previousElementSibling.value = this.value"><br><br>
+                    <div class="mb-3">
+                        <label for="sequence_length" class="form-label">Sequence Length (10-256):</label>
+                        <input type="range" id="sequence_length" name="sequence_length" min="10" max="256" value="10" class="form-range" oninput="this.nextElementSibling.value = this.value">
+                        <input type="number" min="10" max="256" value="10" class="form-control mt-2" oninput="this.previousElementSibling.value = this.value">
+                    </div>
 
-            <label for="target_offset">Target Offset (1 - sequence_length/2):</label>
-            <input type="range" id="target_offset" name="target_offset" min="1" max="128" value="1" oninput="this.nextElementSibling.value = this.value">
-            <input type="number" min="1" max="128" value="1" oninput="this.previousElementSibling.value = this.value"><br><br>
+                    <div class="mb-3">
+                        <label for="target_offset" class="form-label">Target Offset (1 - sequence_length/2):</label>
+                        <input type="range" id="target_offset" name="target_offset" min="1" max="128" value="1" class="form-range" oninput="this.nextElementSibling.value = this.value">
+                        <input type="number" min="1" max="128" value="1" class="form-control mt-2" oninput="this.previousElementSibling.value = this.value">
+                    </div>
 
-            <label for="batch_size">Batch Size:</label>
-            <select id="batch_size" name="batch_size">
-                <option value="8">8</option>
-                <option value="16">16</option>
-                <option value="32" selected>32</option>
-                <option value="64">64</option>
-                <option value="128">128</option>
-                <option value="256">256</option>
-            </select><br><br>
+                    <div class="mb-3">
+                        <label for="batch_size" class="form-label">Batch Size:</label>
+                        <select id="batch_size" name="batch_size" class="form-select">
+                            <option value="8">8</option>
+                            <option value="16">16</option>
+                            <option value="32" selected>32</option>
+                            <option value="64">64</option>
+                            <option value="128">128</option>
+                            <option value="256">256</option>
+                        </select>
+                    </div>
 
-            <label for="num_epochs">Number of Epochs (1-100):</label>
-            <input type="range" id="num_epochs" name="num_epochs" min="1" max="100" value="10" oninput="this.nextElementSibling.value = this.value">
-            <input type="number" min="1" max="100" value="10" oninput="this.previousElementSibling.value = this.value"><br><br>
+                    <div class="mb-3">
+                        <label for="num_epochs" class="form-label">Number of Epochs (1-100):</label>
+                        <input type="range" id="num_epochs" name="num_epochs" min="1" max="100" value="10" class="form-range" oninput="this.nextElementSibling.value = this.value">
+                        <input type="number" min="1" max="100" value="10" class="form-control mt-2" oninput="this.previousElementSibling.value = this.value">
+                    </div>
 
-            <label for="learning_rate">Learning Rate:</label>
-            <input type="number" id="learning_rate" name="learning_rate" step="0.0001" value="0.001" required><br><br>
+                    <div class="mb-3">
+                        <label for="learning_rate" class="form-label">Learning Rate:</label>
+                        <input type="number" id="learning_rate" name="learning_rate" step="0.0001" value="0.001" class="form-control" required>
+                    </div>
 
-            <label for="impute_backward">Impute Backward (0 - sequence_length/4):</label>
-            <input type="range" id="impute_backward" name="impute_backward" min="0" max="64" value="0" oninput="this.nextElementSibling.value = this.value">
-            <input type="number" min="0" max="64" value="0" oninput="this.previousElementSibling.value = this.value"><br><br>
+                    <div class="mb-3">
+                        <label for="impute_backward" class="form-label">Impute Backward (0 - sequence_length/4):</label>
+                        <input type="range" id="impute_backward" name="impute_backward" min="0" max="64" value="0" class="form-range" oninput="this.nextElementSibling.value = this.value">
+                        <input type="number" min="0" max="64" value="0" class="form-control mt-2" oninput="this.previousElementSibling.value = this.value">
+                    </div>
 
-            <label for="group_by">Group By:</label>
-            <input type="text" id="group_by" name="group_by" value="T" required><br><br>
+                    <div class="mb-3">
+                        <label for="group_by" class="form-label">Group By:</label>
+                        <input type="text" id="group_by" name="group_by" value="T" class="form-control" required>
+                    </div>
 
-            <label for="eval_every">Evaluate Every (Epochs):</label>
-            <input type="number" id="eval_every" name="eval_every" min="1" value="1" required><br><br>
+                    <div class="mb-3">
+                        <label for="eval_every" class="form-label">Evaluate Every (Epochs):</label>
+                        <input type="number" id="eval_every" name="eval_every" min="1" value="1" class="form-control" required>
+                    </div>
 
-            <label for="early_stopping_patience">Early Stopping Patience:</label>
-            <input type="number" id="early_stopping_patience" name="early_stopping_patience" min="1" value="5" required><br><br>
+                    <div class="mb-3">
+                        <label for="early_stopping_patience" class="form-label">Early Stopping Patience:</label>
+                        <input type="number" id="early_stopping_patience" name="early_stopping_patience" min="1" value="5" class="form-control" required>
+                    </div>
 
-            <button type="submit">Start Training</button>
-        </form>
+                    <button type="submit" class="btn btn-primary">Start Training</button>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 
-<footer>
+<footer class="bg-dark text-white text-center py-3">
     <p>&copy; 2024 Model Management Dashboard</p>
 </footer>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
     // Modal handling functions
     function showModal() {
-        document.getElementById("modelConfigModal").style.display = "block";
-    }
-
-    function closeModal() {
-        document.getElementById("modelConfigModal").style.display = "none";
+        var myModal = new bootstrap.Modal(document.getElementById('modelConfigModal'), {
+            keyboard: false
+        });
+        myModal.show();
     }
 
     // Start/Stop form handling
@@ -174,7 +220,7 @@
         if (response.ok) {
             button.innerHTML = 'Online';
             button.disabled = true;
-            button.style.backgroundColor = '#ccc'; // Change the color to gray
+            button.classList.add('btn-secondary'); // Change the button appearance
             status.innerHTML = 'Online';
         } else {
             alert('Failed to start the model.');
