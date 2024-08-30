@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  # Service name
+  signals_c:
+    image: signals_i
+    build:
+      # Path to Dockerfile
+      context: .
+      dockerfile: Dockerfile
+    container_name: signals_c
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - 8000:8000
+    volumes:
+      - ./app/models:/signals/app/models
+
+#    networks:
+#      staging:
+
+#networks:
+#  staging:
+#    external: true
